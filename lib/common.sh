@@ -229,3 +229,64 @@ sd_check_writable_file() {
     local f="$1"
     [ -f "$f" ] && [ -r "$f" ] && [ -w "$f" ]
 }
+
+sd_load_shflags() {
+    if [ -f "${SCRIPT_DIR}/lib/shflags" ]; then
+        . "${SCRIPT_DIR}/lib/shflags"
+    else
+        sd_fail "cannot find lib/shflags"
+    fi
+}
+
+sd_get_parts_physical_order() {
+    local device="$1"
+    local table physical
+    table=$("$SD_CGPT" show -q "$device")
+    physical=$(awk '{print $1}' <<<"$table" | sort -n)
+    for p in $physical; do
+        grep "^[[:space:]]*${p}[[:space:]]" <<<"$table" | awk '{print $3}'
+    done 
+}
+
+sd_delete_partitions_except() {
+    local image="$1"
+    shift
+    local keep=("$@")
+    local part to_delete=()
+    for part in $(sd_gpt_used_partitions "$image"); do 
+        local found=0
+        for k in "${keep[@]}"; do [ "$part" = "$k" ] && found=1; done 
+        [ "$found" -eq 0 ] && to_delete+=("$part")
+    done 
+    sd_log "deleting partitions: ${to_delete[*]}"
+    "$SD_SFDISK" --delete "$image" "${to_delete[@]}" >/dev/null 2>&1
+}
+
+sd_squash_partitions() {
+    local device="$1"
+    local part 
+    for part in $(sd_get_parts_physical_order "$device"); do
+        sd_debug "squashing ${device}p${part}"
+        "$SD_SFDISK" -N "$part" --move-data "$device" >/dev/null 2>&1 <<<"+,-" || :
+    done 
+}
+
+sd_truncate_image() {
+    local image="$1" outsizefile="${2:-}"
+    local buffer=35
+    local sector_size final_sector end_bytes
+    sector_size=$(sd_gpt_sector_size "$image")
+    final_sector=$("$SD_SFDISK" -l -o end "$image" 2>/dev/null | awk '/^[[:space:]]*[0-9]/ {print $1}' | sort -n | tail -1)
+    end_bytes=$(((final_sector + buffer) * sector_size))
+    sd_log "truncating image to $(sd_format_size "$end_bytes")"
+    if [ -b "$image" ]; then 
+        local ld; ld=$(losetup -f)
+        losetup -P "$ld" "$image" --sizelimit "$endbytes"
+        sd_quiet_sgdisk sgdisk -e "$ld"
+        losetup -d "$ld"
+    else 
+        truncate -s "$end_bytes" "$image"
+        sd_quiet_sgdisk sgdisk -e "$image"
+    fi 
+    [ -z "$outsizefile" ] || echo "$end_bytes" >"$outsizefile"
+}
