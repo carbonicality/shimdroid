@@ -1,0 +1,162 @@
+package dev.openanalytics.wear.data
+
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.security.KeyPairGenerator
+import java.security.Signature
+import java.security.interfaces.RSAPublicKey
+import java.time.LocalDate
+import java.util.Base64
+
+class DataLayerTest {
+
+    private val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+
+    private fun serviceAccountJson(): String {
+        val b64 = Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(keyPair.private.encoded)
+        val pem = "-----BEGIN PRIVATE KEY-----\n$b64\n-----END PRIVATE KEY-----\n"
+        return JSONObject()
+            .put("type", "service_account")
+            .put("client_email", "ga-reader@example.iam.gserviceaccount.com")
+            .put("private_key", pem)
+            .put("token_uri", "https://oauth2.googleapis.com/token")
+            .toString()
+    }
+
+    @Test
+    fun jwtAssertionIsValidAndVerifiable() {
+        val sa = ServiceAccount.fromJson(serviceAccountJson())
+        val jwt = TokenProvider(sa).createAssertion(1_700_000_000)
+        val parts = jwt.split(".")
+        assertEquals(3, parts.size)
+
+        val dec = Base64.getUrlDecoder()
+        val header = JSONObject(String(dec.decode(parts[0])))
+        val claims = JSONObject(String(dec.decode(parts[1])))
+        assertEquals("RS256", header.getString("alg"))
+        assertEquals("ga-reader@example.iam.gserviceaccount.com", claims.getString("iss"))
+        assertEquals(TokenProvider.SCOPE, claims.getString("scope"))
+        assertEquals(1_700_003_600L, claims.getLong("exp"))
+
+        val ok = Signature.getInstance("SHA256withRSA").run {
+            initVerify(keyPair.public as RSAPublicKey)
+            update("${parts[0]}.${parts[1]}".toByteArray())
+            verify(dec.decode(parts[2]))
+        }
+        assertTrue(ok)
+    }
+
+    @Test
+    fun tokenIsCachedUntilNearExpiry() {
+        var calls = 0
+        var now = 0L
+        val http = object : Http {
+            override fun request(method: String, url: String, headers: Map<String, String>, body: String?): JSONObject {
+                calls++
+                assertTrue(body!!.contains("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer"))
+                return JSONObject().put("access_token", "tok$calls").put("expires_in", 3600)
+            }
+        }
+        val tp = TokenProvider(ServiceAccount.fromJson(serviceAccountJson()), http) { now }
+        assertEquals("tok1", tp.accessToken())
+        now = 3_000_000 // 50 min
+        assertEquals("tok1", tp.accessToken())
+        now = 3_550_000 // within the 60 s refresh margin
+        assertEquals("tok2", tp.accessToken())
+    }
+
+    @Test(expected = ConfigException::class)
+    fun rejectsNonServiceAccountJson() {
+        ServiceAccount.fromJson("""{"type":"authorized_user"}""")
+    }
+
+    @Test
+    fun normalizesPropertyId() {
+        assertEquals("123456789", AnalyticsClient.normalizePropertyId(" properties/123456789 "))
+        assertEquals("42", AnalyticsClient.normalizePropertyId("42"))
+    }
+
+    @Test(expected = ConfigException::class)
+    fun rejectsMeasurementId() {
+        AnalyticsClient.normalizePropertyId("G-ABC123")
+    }
+
+    private fun row(dims: List<String>, metrics: List<String>) = JSONObject()
+        .put("dimensionValues", JSONArray().apply { dims.forEach { put(JSONObject().put("value", it)) } })
+        .put("metricValues", JSONArray().apply { metrics.forEach { put(JSONObject().put("value", it)) } })
+
+    private fun headers(vararg names: String) = JSONArray().apply { names.forEach { put(JSONObject().put("name", it)) } }
+
+    @Test
+    fun parsesPerMinuteOldestFirstWithGaps() {
+        val report = JSONObject().put(
+            "rows",
+            JSONArray().put(row(listOf("00"), listOf("5"))).put(row(listOf("02"), listOf("3"))),
+        )
+        val series = Reports.perMinute(report)
+        assertEquals(REALTIME_MINUTES, series.size)
+        assertEquals(5L, series.last())
+        assertEquals(0L, series[REALTIME_MINUTES - 2])
+        assertEquals(3L, series[REALTIME_MINUTES - 3])
+    }
+
+    @Test
+    fun emptyReportMeansZero() {
+        assertEquals(0L, Reports.total(JSONObject()))
+        assertEquals(emptyList<RankedItem>(), Reports.ranked(JSONObject()))
+    }
+
+    @Test
+    fun parsesSummaryBatch() {
+        val periods = JSONObject()
+            .put("dimensionHeaders", headers("dateRange"))
+            .put("metricHeaders", headers("activeUsers", "newUsers", "sessions", "screenPageViews"))
+            .put(
+                "rows",
+                JSONArray()
+                    .put(row(listOf("today"), listOf("10", "4", "12", "30")))
+                    .put(row(listOf("yesterday"), listOf("20", "5", "25", "60")))
+                    .put(row(listOf("last7"), listOf("140", "50", "170", "400")))
+                    .put(row(listOf("prev7"), listOf("100", "40", "120", "300"))),
+            )
+        val daily = JSONObject().put(
+            "rows",
+            JSONArray().put(row(listOf("20261028"), listOf("21"))).put(row(listOf("20261103"), listOf("19"))),
+        )
+        val pages = JSONObject().put("rows", JSONArray().put(row(listOf("Home"), listOf("250"))))
+        val countries = JSONObject().put("rows", JSONArray().put(row(listOf("United Kingdom"), listOf("90"))))
+        val batch = JSONObject().put("reports", JSONArray().put(periods).put(daily).put(pages).put(countries))
+
+        val s = Reports.summary(batch, LocalDate.of(2026, 11, 4))
+        assertEquals(MetricSet(10, 4, 12, 30), s.today)
+        assertEquals(20L, s.yesterday.activeUsers)
+        assertEquals(140L, s.last7.activeUsers)
+        assertEquals(100L, s.prev7.activeUsers)
+        assertEquals(7, s.daily.size)
+        assertEquals(LocalDate.of(2026, 10, 28), s.daily.first().date)
+        assertEquals(21L, s.daily.first().users)
+        assertEquals(19L, s.daily.last().users)
+        assertEquals(0L, s.daily[3].users)
+        assertEquals(listOf(RankedItem("Home", 250)), s.topPages)
+        assertEquals("United Kingdom", s.topCountries.single().label)
+    }
+
+    @Test
+    fun summaryRequestUsesAtMostFourDateRanges() {
+        val reqs = Reports.summaryBatch().getJSONArray("requests")
+        assertEquals(4, reqs.length())
+        for (i in 0 until reqs.length()) assertTrue(reqs.getJSONObject(i).getJSONArray("dateRanges").length() <= 4)
+    }
+
+    @Test
+    fun errorMessagesIncludeHints() {
+        val msg = Http.describeError(403, """{"error":{"code":403,"message":"User does not have sufficient permissions"}}""")
+        assertTrue(msg.startsWith("HTTP 403: User does not have sufficient permissions"))
+        assertTrue(msg.contains("Viewer"))
+        val oauth = Http.describeError(400, """{"error":"invalid_grant","error_description":"Invalid JWT Signature."}""")
+        assertEquals("HTTP 400: Invalid JWT Signature.", oauth)
+    }
+}
