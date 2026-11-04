@@ -46,6 +46,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.wear.compose.foundation.ExperimentalWearFoundationApi
 import androidx.wear.compose.foundation.HierarchicalFocusCoordinator
 import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
@@ -172,6 +173,7 @@ private fun PaperList(listState: ScalingLazyListState, content: ScalingLazyListS
 
 // ---------------------------------------------------------------- dashboard: ring page + list page
 
+@OptIn(ExperimentalWearFoundationApi::class)
 @Composable
 private fun DashboardPager(
     state: DashboardState,
@@ -209,6 +211,7 @@ private fun DashboardPager(
 }
 
 /** Page 1: the minute ring. Bezel / crown or a tap on a tick picks how far back to count. */
+@OptIn(ExperimentalWearFoundationApi::class)
 @Composable
 fun RingPage(state: DashboardState, actions: AppActions) {
     val haptics = LocalHapticFeedback.current
