@@ -53,7 +53,6 @@ class TileText(private val context: Context) {
     /**
      * Text built from one image per character, for values that change often
      * (clock times) so many timeline entries share a handful of glyph images.
-     * Digits are tabular, so per-character layout keeps their spacing even.
      */
     fun glyphs(value: String, sizeSp: Float, color: Int, weight: Weight = Weight.Regular): LayoutElement {
         val row = LayoutElementBuilders.Row.Builder()
@@ -85,7 +84,7 @@ class TileText(private val context: Context) {
             }
             textSize = sizeSp * density * fontScale
             this.color = color
-            fontFeatureSettings = "tnum"
+            // No "tnum": in DM Sans it also widens spaces, commas and colons.
         }
         val fm = paint.fontMetrics
         val pad = 1f * density

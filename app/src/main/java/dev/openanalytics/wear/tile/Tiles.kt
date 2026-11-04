@@ -244,7 +244,7 @@ class Tiles(private val fonts: TileText) {
                     .addContent(hgap(7f))
                     .addContent(
                         fixedWidth(
-                            if (small) 74f else 90f,
+                            if (small) 70f else 84f,
                             LayoutElementBuilders.Column.Builder()
                                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
                                 .addContent(text(z.city, 12f, ON_SURFACE, medium = true))
@@ -252,7 +252,7 @@ class Tiles(private val fonts: TileText) {
                                 .build(),
                         ),
                     )
-                    .addContent(fixedWidth(if (small) 42f else 48f, fonts.glyphs(t.format(H_MM), if (small) 16f else 18f, ON_SURFACE, TileText.Weight.Medium), end = true))
+                    .addContent(fixedWidth(if (small) 46f else 54f, fonts.glyphs(t.format(H_MM), if (small) 16f else 18f, ON_SURFACE, TileText.Weight.Medium), end = true))
                     .addContent(hgap(3f))
                     .addContent(text(t.format(AMPM), 9f, MUTED))
                     .build(),
