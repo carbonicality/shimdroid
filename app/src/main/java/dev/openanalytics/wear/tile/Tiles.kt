@@ -219,7 +219,10 @@ object Tiles {
     private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
 
     fun usClock(context: Context, device: DeviceParameters, at: Instant): LayoutElement {
-        val w = 172f
+        // Smaller watches (e.g. Galaxy Watch 7 40 mm, ~216 dp) get a tighter layout.
+        val small = device.screenWidthDp < 225
+        val w = if (small) 152f else 172f
+        val rowGap = if (small) 3f else 5f
         val body = LayoutElementBuilders.Column.Builder()
             .setWidth(dp(w))
             .addContent(
@@ -229,7 +232,7 @@ object Tiles {
         for ((i, z) in US_ZONES.withIndex()) {
             val t = at.atZone(z.id)
             val day = t.hour in 7..18
-            body.addContent(gap(5f))
+            body.addContent(gap(rowGap))
             body.addContent(
                 LayoutElementBuilders.Row.Builder()
                     .setWidth(dp(w))
@@ -238,7 +241,7 @@ object Tiles {
                     .addContent(hgap(7f))
                     .addContent(
                         fixedWidth(
-                            90f,
+                            if (small) 80f else 90f,
                             LayoutElementBuilders.Column.Builder()
                                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
                                 .addContent(text(z.city, 12f, ON_SURFACE, medium = true))
@@ -246,12 +249,12 @@ object Tiles {
                                 .build(),
                         ),
                     )
-                    .addContent(fixedWidth(48f, text(t.format(H_MM), 18f, ON_SURFACE, medium = true), end = true))
+                    .addContent(fixedWidth(if (small) 42f else 48f, text(t.format(H_MM), if (small) 16f else 18f, ON_SURFACE, medium = true), end = true))
                     .addContent(hgap(3f))
                     .addContent(text(t.format(AMPM), 9f, MUTED))
                     .build(),
             )
-            body.addContent(gap(5f))
+            body.addContent(gap(rowGap))
             if (i < US_ZONES.lastIndex) body.addContent(rect(w, 1f, TRACK))
         }
         return frame(context, device, body.build())
