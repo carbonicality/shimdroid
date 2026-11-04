@@ -83,7 +83,8 @@ dependencies {
     implementation("androidx.wear.protolayout:protolayout:1.2.1")
     implementation("androidx.wear.protolayout:protolayout-material:1.2.1")
     implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
-    implementation("com.google.guava:listenablefuture:1.0")
+    // Full Guava: tiles-renderer brings it in, which empties the standalone listenablefuture artifact
+    implementation("com.google.guava:guava:33.3.1-android")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real org.json for JVM unit tests
