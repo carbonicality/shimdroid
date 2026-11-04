@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,6 +28,7 @@ import dev.openanalytics.wear.ui.AppActions
 import dev.openanalytics.wear.ui.DashboardState
 import dev.openanalytics.wear.ui.OpenAnalyticsApp
 import dev.openanalytics.wear.ui.OpenAnalyticsTheme
+import dev.openanalytics.wear.ui.Palette
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,7 +58,7 @@ abstract class ScreenshotBase(private val folder: String) {
     private fun shoot(name: String, content: @Composable () -> Unit) {
         compose.setContent {
             OpenAnalyticsTheme {
-                Box(Modifier.fillMaxSize().clip(CircleShape).background(Color.Black)) { content() }
+                Box(Modifier.fillMaxSize().clip(CircleShape).background(Palette.Bg)) { content() }
             }
         }
         compose.waitForIdle()

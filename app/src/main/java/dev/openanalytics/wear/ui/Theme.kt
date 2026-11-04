@@ -5,18 +5,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.wear.compose.material.Colors
 import androidx.wear.compose.material.MaterialTheme
 
-val Amber = Color(0xFFF9AB00)
-val Orange = Color(0xFFE37400)
-val Up = Color(0xFF81C995)
-val Down = Color(0xFFF28B82)
-val Muted = Color(0xFFBDC1C6)
-val Blue = Color(0xFF8AB4F8)
+/** Flat, cool palette: ink background, slate surfaces, one periwinkle accent. */
+object Palette {
+    val Bg = Color(0xFF11151C)
+    val Surface = Color(0xFF1A2029)
+    val SurfaceHigh = Color(0xFF262E3A)
+    val OnSurface = Color(0xFFE6EAF2)
+    val Muted = Color(0xFF8D97A9)
+    val Accent = Color(0xFFA9B8FF)
+    val Ink = Color(0xFF141A2B) // text on accent
+    val Up = Color(0xFF7FD8B0)
+    val Down = Color(0xFFFF9C9C)
+}
 
 private val colors = Colors(
-    primary = Amber,
-    primaryVariant = Orange,
-    secondary = Blue,
-    onPrimary = Color.Black,
+    primary = Palette.Accent,
+    primaryVariant = Palette.Accent,
+    secondary = Palette.Accent,
+    secondaryVariant = Palette.Accent,
+    background = Palette.Bg,
+    surface = Palette.Surface,
+    error = Palette.Down,
+    onPrimary = Palette.Ink,
+    onSecondary = Palette.Ink,
+    onBackground = Palette.OnSurface,
+    onSurface = Palette.OnSurface,
+    onSurfaceVariant = Palette.Muted,
+    onError = Palette.Ink,
 )
 
 @Composable

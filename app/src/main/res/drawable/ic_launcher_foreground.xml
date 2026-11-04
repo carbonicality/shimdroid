@@ -4,7 +4,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <!-- Three ascending bars, centred in the 72dp safe zone. -->
-    <path android:fillColor="#E37400" android:pathData="M33,60h12v15h-12z" />
-    <path android:fillColor="#F9AB00" android:pathData="M48,47h12v28h-12z" />
-    <path android:fillColor="#FDD663" android:pathData="M63,33h12v42h-12z" />
+    <path android:fillColor="#55639F" android:pathData="M33,60h12v15h-12z" />
+    <path android:fillColor="#7F90DD" android:pathData="M48,47h12v28h-12z" />
+    <path android:fillColor="#A9B8FF" android:pathData="M63,33h12v42h-12z" />
 </vector>

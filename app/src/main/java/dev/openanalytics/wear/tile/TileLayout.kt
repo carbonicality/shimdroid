@@ -5,6 +5,7 @@ import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.argb
 import androidx.wear.protolayout.DeviceParametersBuilders.DeviceParameters
 import androidx.wear.protolayout.DimensionBuilders.dp
+import androidx.wear.protolayout.DimensionBuilders.expand
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.ModifiersBuilders
 import androidx.wear.protolayout.material.ChipColors
@@ -29,12 +30,14 @@ sealed interface TileContent {
 private const val ID_OPEN = "open"
 private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-private val AMBER = 0xFFF9AB00.toInt()
-private val GREEN = 0xFF81C995.toInt()
-private val RED = 0xFFF28B82.toInt()
-private val MUTED = 0xFFBDC1C6.toInt()
-private val WHITE = 0xFFFFFFFF.toInt()
-private val BLACK = 0xFF000000.toInt()
+// Same palette as the app (ui/Theme.kt).
+private val BG = 0xFF11151C.toInt()
+private val ACCENT = 0xFFA9B8FF.toInt()
+private val INK = 0xFF141A2B.toInt()
+private val UP = 0xFF7FD8B0.toInt()
+private val DOWN = 0xFFFF9C9C.toInt()
+private val MUTED = 0xFF8D97A9.toInt()
+private val ON_SURFACE = 0xFFE6EAF2.toInt()
 
 /**
  * Tile layout: "Active now" + big realtime number, Today / 7 days with deltas,
@@ -61,32 +64,32 @@ fun tileLayout(context: Context, device: DeviceParameters, content: TileContent)
         .build()
 
     val chip = CompactChip.Builder(context, "Open", openApp, device)
-        .setChipColors(ChipColors(AMBER, BLACK))
+        .setChipColors(ChipColors(ACCENT, INK))
         .build()
 
     val builder = PrimaryLayout.Builder(device).setPrimaryChipContent(chip)
 
     when (content) {
         is TileContent.Message -> {
-            builder.setPrimaryLabelTextContent(text(context, "openAnalytics", Typography.TYPOGRAPHY_CAPTION1, AMBER))
+            builder.setPrimaryLabelTextContent(text(context, "OPENANALYTICS", Typography.TYPOGRAPHY_CAPTION2, MUTED))
             builder.setContent(
                 clickableColumn(refresh) {
-                    addContent(text(context, content.title, Typography.TYPOGRAPHY_TITLE3, WHITE))
+                    addContent(text(context, content.title, Typography.TYPOGRAPHY_TITLE3, ON_SURFACE))
                     addContent(text(context, content.body, Typography.TYPOGRAPHY_CAPTION2, MUTED))
                 },
             )
         }
         is TileContent.Stats -> {
             val s = content.snapshot
-            builder.setPrimaryLabelTextContent(text(context, "Active now", Typography.TYPOGRAPHY_CAPTION1, AMBER))
+            builder.setPrimaryLabelTextContent(text(context, "ACTIVE NOW", Typography.TYPOGRAPHY_CAPTION2, MUTED))
             builder.setContent(
                 clickableColumn(refresh) {
-                    addContent(text(context, compact(s.activeUsers), Typography.TYPOGRAPHY_DISPLAY2, GREEN))
+                    addContent(text(context, compact(s.activeUsers), Typography.TYPOGRAPHY_DISPLAY2, ACCENT))
                     addContent(LayoutElementBuilders.Spacer.Builder().setHeight(dp(4f)).build())
                     addContent(
                         LayoutElementBuilders.Row.Builder()
                             .addContent(stat(context, "Today", s.todayUsers, s.yesterdayUsers))
-                            .addContent(LayoutElementBuilders.Spacer.Builder().setWidth(dp(16f)).build())
+                            .addContent(LayoutElementBuilders.Spacer.Builder().setWidth(dp(20f)).build())
                             .addContent(stat(context, "7 days", s.last7Users, s.prev7Users))
                             .build(),
                     )
@@ -98,27 +101,42 @@ fun tileLayout(context: Context, device: DeviceParameters, content: TileContent)
                     context,
                     if (content.stale) "offline · $time" else "updated $time",
                     Typography.TYPOGRAPHY_CAPTION3,
-                    if (content.stale) RED else MUTED,
+                    if (content.stale) DOWN else MUTED,
                 ),
             )
         }
     }
-    return builder.build()
+    val radius = minOf(device.screenWidthDp, device.screenHeightDp) / 2f
+    return LayoutElementBuilders.Box.Builder()
+        .setWidth(expand())
+        .setHeight(expand())
+        .setModifiers(
+            ModifiersBuilders.Modifiers.Builder()
+                .setBackground(
+                    ModifiersBuilders.Background.Builder()
+                        .setColor(argb(BG))
+                        .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(radius)).build())
+                        .build(),
+                )
+                .build(),
+        )
+        .addContent(builder.build())
+        .build()
 }
 
-/** "Today / 1.2k / ▲ 12%" stacked. */
+/** "TODAY / 1.2k / ↑ 12%" stacked. */
 private fun stat(context: Context, label: String, value: Long, previous: Long): LayoutElementBuilders.LayoutElement {
     val pct = percentChange(value, previous)
     val (delta, color) = when {
-        pct == null -> "—" to MUTED
-        pct > 0 -> "▲ $pct%" to GREEN
-        pct < 0 -> "▼ ${-pct}%" to RED
-        else -> "0%" to MUTED
+        pct == null -> "new" to MUTED
+        pct > 0 -> "↑ $pct%" to UP
+        pct < 0 -> "↓ ${-pct}%" to DOWN
+        else -> "± 0%" to MUTED
     }
     return LayoutElementBuilders.Column.Builder()
         .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-        .addContent(text(context, label, Typography.TYPOGRAPHY_CAPTION3, MUTED))
-        .addContent(text(context, compact(value), Typography.TYPOGRAPHY_TITLE3, WHITE))
+        .addContent(text(context, label.uppercase(), Typography.TYPOGRAPHY_CAPTION3, MUTED))
+        .addContent(text(context, compact(value), Typography.TYPOGRAPHY_TITLE3, ON_SURFACE))
         .addContent(text(context, delta, Typography.TYPOGRAPHY_CAPTION3, color))
         .build()
 }
