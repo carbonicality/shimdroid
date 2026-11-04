@@ -3,6 +3,7 @@ package dev.openanalytics.wear.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,40 +16,51 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.wear.compose.foundation.HierarchicalFocusCoordinator
 import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
 import androidx.wear.compose.foundation.lazy.ScalingLazyListState
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.foundation.rememberActiveFocusRequester
 import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipColors
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.CircularProgressIndicator
+import androidx.wear.compose.material.HorizontalPageIndicator
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.ListHeader
+import androidx.wear.compose.material.OutlinedChip
+import androidx.wear.compose.material.PageIndicatorState
 import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
@@ -57,6 +69,7 @@ import dev.openanalytics.wear.R
 import dev.openanalytics.wear.auth.GoogleAuth
 import dev.openanalytics.wear.data.GaProperty
 import dev.openanalytics.wear.data.MetricSet
+import dev.openanalytics.wear.data.REALTIME_MINUTES
 import dev.openanalytics.wear.data.RankedItem
 import kotlinx.coroutines.delay
 import java.time.format.DateTimeFormatter
@@ -71,6 +84,7 @@ class AppActions(
     val changeProperty: () -> Unit = {},
     val signOut: () -> Unit = {},
     val refresh: () -> Unit = {},
+    val selectWindow: (Int) -> Unit = {},
 )
 
 /** Wires the ViewModel, Google sign-in / consent activities and foreground polling to [OpenAnalyticsApp]. */
@@ -116,6 +130,7 @@ fun DashboardRoute(viewModel: DashboardViewModel) {
             changeProperty = viewModel::changeProperty,
             signOut = viewModel::signOut,
             refresh = { viewModel.refresh(forceSummary = true) },
+            selectWindow = viewModel::selectWindow,
         ),
     )
 }
@@ -127,334 +142,346 @@ fun OpenAnalyticsApp(
     actions: AppActions,
     listState: ScalingLazyListState = rememberScalingLazyListState(),
     timeText: @Composable () -> Unit = { TimeText() },
+    initialPage: Int = 0,
 ) {
+    if (state.stage == Stage.Dashboard) {
+        DashboardPager(state, actions, listState, timeText, initialPage)
+        return
+    }
     Scaffold(
         modifier = Modifier.background(Palette.Bg),
         timeText = timeText,
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
     ) {
-        ScalingLazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            autoCentering = AutoCenteringParams(itemIndex = 0),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            when (state.stage) {
-                Stage.SignIn -> signInItems(state, actions)
-                Stage.PickProperty -> pickPropertyItems(state, actions)
-                Stage.Dashboard -> dashboardItems(state, actions)
+        PaperList(listState) {
+            if (state.stage == Stage.SignIn) signInItems(state, actions) else pickPropertyItems(state, actions)
+        }
+    }
+}
+
+@Composable
+private fun PaperList(listState: ScalingLazyListState, content: ScalingLazyListScope.() -> Unit) {
+    ScalingLazyColumn(
+        modifier = Modifier.fillMaxSize().background(Palette.Bg),
+        state = listState,
+        autoCentering = AutoCenteringParams(itemIndex = 0),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        content = content,
+    )
+}
+
+// ---------------------------------------------------------------- dashboard: ring page + list page
+
+@Composable
+private fun DashboardPager(
+    state: DashboardState,
+    actions: AppActions,
+    listState: ScalingLazyListState,
+    timeText: @Composable () -> Unit,
+    initialPage: Int,
+) {
+    val pager = rememberPagerState(initialPage = initialPage) { 2 }
+    val indicator = remember(pager) {
+        object : PageIndicatorState {
+            override val pageOffset get() = pager.currentPageOffsetFraction
+            override val selectedPage get() = pager.currentPage
+            override val pageCount get() = 2
+        }
+    }
+    Scaffold(
+        modifier = Modifier.background(Palette.Bg),
+        timeText = timeText,
+        positionIndicator = { if (pager.currentPage == 1) PositionIndicator(scalingLazyListState = listState) },
+        pageIndicator = {
+            HorizontalPageIndicator(
+                pageIndicatorState = indicator,
+                selectedColor = Palette.OnSurface,
+                unselectedColor = Palette.BarMuted,
+            )
+        },
+    ) {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            HierarchicalFocusCoordinator(requiresFocus = { pager.currentPage == page }) {
+                if (page == 0) RingPage(state, actions) else DashboardList(state, actions, listState)
             }
         }
     }
 }
 
-// ---------------------------------------------------------------- screens
+/** Page 1: the minute ring. Bezel / crown or a tap on a tick picks how far back to count. */
+@Composable
+fun RingPage(state: DashboardState, actions: AppActions) {
+    val haptics = LocalHapticFeedback.current
+    val minutes by rememberUpdatedState(state.windowMinutes)
+    var acc by remember { mutableFloatStateOf(0f) }
+    val focus = rememberActiveFocusRequester()
+    val rt = state.realtime
 
-private fun ScalingLazyListScope.header(text: String) {
-    item {
-        ListHeader {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Palette.Bg)
+            .onRotaryScrollEvent { e ->
+                acc += e.verticalScrollPixels
+                var n = minutes
+                while (acc >= ROTARY_STEP_PX) { n++; acc -= ROTARY_STEP_PX }
+                while (acc <= -ROTARY_STEP_PX) { n--; acc += ROTARY_STEP_PX }
+                n = n.coerceIn(1, REALTIME_MINUTES)
+                if (n != minutes) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    actions.selectWindow(n)
+                }
+                true
+            }
+            .focusRequester(focus)
+            .focusable(),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (rt == null) {
+            if (state.loading) Spinner() else state.error?.let { Text(it, color = Palette.Down, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(32.dp)) }
+            return@Box
+        }
+        MinuteRing(rt.perMinute, state.windowMinutes, onSelect = actions.selectWindow)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 44.dp)) {
             Text(
-                text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = Palette.OnSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
+                if (state.windowMinutes == 1) "Right now" else "Past ${state.windowMinutes} min",
+                color = Palette.Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium,
             )
+            Text(
+                state.windowUsers?.let(::full) ?: "–",
+                color = Palette.OnSurface,
+                fontSize = 54.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = (-2).sp,
+                style = tabular,
+                maxLines = 1,
+            )
+            Text("unique users", color = Palette.Muted, fontSize = 10.sp)
+            Hairline(Modifier.width(140.dp).padding(top = 10.dp, bottom = 7.dp))
+            Row(Modifier.width(140.dp)) {
+                PairStat("Now", rt.nowUsers, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(30.dp).background(Palette.Hairline))
+                PairStat("Past 30 min", rt.activeUsers, Modifier.weight(1f))
+            }
         }
     }
 }
 
+@Composable
+private fun PairStat(label: String, value: Long, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Palette.Muted, fontSize = 9.sp)
+        Text(full(value), color = Palette.OnSurface, fontSize = 15.sp, fontWeight = FontWeight.Medium, style = tabular)
+    }
+}
+
+/** Page 2: everything else. */
+@Composable
+fun DashboardList(state: DashboardState, actions: AppActions, listState: ScalingLazyListState) {
+    PaperList(listState) { dashboardItems(state, actions) }
+}
+
+private fun ScalingLazyListScope.dashboardItems(state: DashboardState, actions: AppActions) {
+    item {
+        Text(
+            state.property?.name ?: "openAnalytics",
+            color = Palette.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 20.dp),
+        )
+    }
+    state.error?.let { err -> item { Notice("Couldn't refresh", err) } }
+    if (state.summary == null && state.loading) item { Spinner() }
+
+    state.summary?.let { s ->
+        item {
+            Section("Today", trailing = "users") {
+                Text(full(s.today.activeUsers), color = Palette.OnSurface, fontSize = 40.sp, fontWeight = FontWeight.Medium, letterSpacing = (-1).sp, style = tabular)
+                DeltaLine(s.today.activeUsers, s.yesterday.activeUsers, "vs yesterday")
+                MetricRow(s.today)
+            }
+        }
+        item {
+            Section("Last 7 days", trailing = "users") {
+                Text(full(s.last7.activeUsers), color = Palette.OnSurface, fontSize = 40.sp, fontWeight = FontWeight.Medium, letterSpacing = (-1).sp, style = tabular)
+                DeltaLine(s.last7.activeUsers, s.prev7.activeUsers, "vs prior week")
+                DayBars(s.daily.map { it.date to it.users }, Modifier.padding(top = 8.dp))
+                MetricRow(s.last7)
+            }
+        }
+    }
+    state.realtime?.topScreens?.takeIf { it.isNotEmpty() }?.let { item { Ranked("Pages now", it) } }
+    state.summary?.let { s ->
+        if (s.topPages.isNotEmpty()) item { Ranked("Top pages · 7 days", s.topPages) }
+        if (s.topCountries.isNotEmpty()) item { Ranked("Countries · 7 days", s.topCountries) }
+    }
+
+    item {
+        PaperChip(
+            label = if (state.loading) "Refreshing…" else "Refresh",
+            icon = R.drawable.ic_refresh,
+            secondary = state.updatedAt?.let { "Updated ${it.format(TIME_FMT)}" },
+            enabled = !state.loading,
+            onClick = actions.refresh,
+        )
+    }
+    item {
+        PaperChip("Change property", R.drawable.ic_chart, secondary = state.property?.name, onClick = actions.changeProperty)
+    }
+    item { SignOutChip(actions.signOut, state.email) }
+}
+
+// ---------------------------------------------------------------- sign in / pick property
+
 private fun ScalingLazyListScope.signInItems(state: DashboardState, actions: AppActions) {
     item {
-        Box(
-            Modifier.size(44.dp).clip(CircleShape).background(Palette.SurfaceHigh),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(Modifier.size(42.dp).clip(CircleShape).background(Palette.Track), contentAlignment = Alignment.Center) {
             Icon(painterResource(R.drawable.ic_chart), contentDescription = null, tint = Palette.Accent)
         }
     }
-    item {
-        Text("openAnalytics", color = Palette.OnSurface, fontSize = 17.sp, fontWeight = FontWeight.Medium)
-    }
+    item { Text("openAnalytics", color = Palette.OnSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
     item {
         Text(
             "Your Google Analytics, at a glance.",
-            color = Palette.Muted,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 12.dp),
+            color = Palette.Muted, fontSize = 12.sp, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 14.dp),
         )
     }
     state.error?.let { err -> item { Notice("Couldn't sign in", err) } }
     item {
         Chip(
             onClick = actions.signIn,
-            label = { Text("Sign in with Google", fontWeight = FontWeight.Medium) },
+            label = { Text("Sign in with Google", fontWeight = FontWeight.SemiBold) },
             icon = { ChipIcon(R.drawable.ic_account) },
-            colors = accentChipColors(),
+            colors = ChipDefaults.chipColors(
+                backgroundColor = Palette.OnSurface,
+                contentColor = Palette.Bg,
+                iconColor = Palette.Bg,
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
     }
     item {
         Text(
             "Uses this watch's Google account · read-only",
-            color = Palette.Muted,
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center,
+            color = Palette.Muted, fontSize = 10.sp, textAlign = TextAlign.Center,
         )
     }
 }
 
 private fun ScalingLazyListScope.pickPropertyItems(state: DashboardState, actions: AppActions) {
-    header("Choose a property")
-    state.email?.let { email ->
-        item { Text(email, color = Palette.Muted, fontSize = 11.sp, maxLines = 1) }
+    item {
+        Text("Choose a property", color = Palette.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 20.dp))
     }
+    state.email?.let { email -> item { Text(email, color = Palette.Muted, fontSize = 11.sp, maxLines = 1) } }
     state.error?.let { err -> item { Notice("Couldn't load", err) } }
     val props = state.properties
     when {
         props == null && state.loading -> item { Spinner() }
-        props == null -> item { FlatChip("Try again", R.drawable.ic_refresh, onClick = actions.reloadProperties) }
+        props == null -> item { PaperChip("Try again", R.drawable.ic_refresh, onClick = actions.reloadProperties) }
         props.isEmpty() -> {
             item { Notice("No properties", "This account can't read any GA4 properties.", Palette.Muted) }
             item { SignOutChip(actions.signOut) }
         }
         else -> {
             items(props) { p ->
-                FlatChip(
-                    label = p.name,
-                    icon = R.drawable.ic_chart,
-                    secondary = p.account.ifBlank { p.id },
-                    onClick = { actions.pickProperty(p) },
-                )
+                PaperChip(p.name, R.drawable.ic_chart, secondary = p.account.ifBlank { p.id }, onClick = { actions.pickProperty(p) })
             }
             item { SignOutChip(actions.signOut) }
         }
     }
 }
 
-private fun ScalingLazyListScope.dashboardItems(state: DashboardState, actions: AppActions) {
-    header(state.property?.name ?: "openAnalytics")
-
-    state.error?.let { err -> item { Notice("Couldn't refresh", err) } }
-
-    if (state.realtime == null && state.summary == null && state.loading) {
-        item { Spinner() }
-    }
-
-    state.realtime?.let { rt ->
-        item {
-            Panel {
-                Eyebrow("Active now", trailing = "30 min", live = true)
-                Figure(rt.activeUsers, color = Palette.Accent, size = 40.sp)
-                Sparkline(rt.perMinute, Palette.Accent, Modifier.padding(top = 4.dp))
-            }
-        }
-    }
-
-    state.summary?.let { s ->
-        item {
-            Panel {
-                Eyebrow("Today", trailing = "users")
-                HeadlineRow(s.today.activeUsers, s.yesterday.activeUsers, "vs yesterday")
-                Hairline()
-                MetricRow(s.today)
-            }
-        }
-        item {
-            Panel {
-                Eyebrow("Last 7 days", trailing = "users")
-                HeadlineRow(s.last7.activeUsers, s.prev7.activeUsers, "vs prior week")
-                DayBars(s.daily.map { it.date to it.users }, Palette.Accent, Modifier.padding(top = 8.dp))
-                Hairline()
-                MetricRow(s.last7)
-            }
-        }
-    }
-
-    state.realtime?.topScreens?.takeIf { it.isNotEmpty() }?.let { items ->
-        item { RankedPanel("Pages now", items) }
-    }
-    state.summary?.let { s ->
-        if (s.topPages.isNotEmpty()) item { RankedPanel("Top pages · 7d", s.topPages) }
-        if (s.topCountries.isNotEmpty()) item { RankedPanel("Countries · 7d", s.topCountries) }
-    }
-
-    val updatedAt = state.updatedAt
-    item {
-        FlatChip(
-            label = if (state.loading) "Refreshing…" else "Refresh",
-            icon = R.drawable.ic_refresh,
-            secondary = updatedAt?.let { "Updated ${it.format(TIME_FMT)}" },
-            enabled = !state.loading,
-            onClick = actions.refresh,
-        )
-    }
-    item {
-        FlatChip(
-            label = "Change property",
-            icon = R.drawable.ic_chart,
-            secondary = state.property?.name,
-            onClick = actions.changeProperty,
-        )
-    }
-    item { SignOutChip(actions.signOut, state.email) }
-}
-
 // ---------------------------------------------------------------- building blocks
 
-/** Flat rounded surface. No gradients. */
-@Composable
-private fun Panel(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(Palette.Surface)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        content = content,
-    )
-}
-
-/** Small spaced caps label, optional live dot and right-aligned note. */
-@Composable
-private fun Eyebrow(text: String, trailing: String? = null, live: Boolean = false, color: Color = Palette.Muted) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (live) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(Palette.Up))
-            Spacer(Modifier.width(6.dp))
-        }
-        Text(
-            text.uppercase(),
-            color = color,
-            fontSize = 10.sp,
-            letterSpacing = 1.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (trailing != null) {
-            Text(trailing, color = Palette.Muted, fontSize = 10.sp, maxLines = 1)
-        }
-    }
-}
-
+private const val ROTARY_STEP_PX = 36f
 private val tabular = TextStyle(fontFeatureSettings = "tnum")
 
 @Composable
-private fun Figure(value: Long, color: Color = Palette.OnSurface, size: TextUnit = 34.sp) {
-    Text(
-        compact(value),
-        color = color,
-        fontSize = size,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = (-0.5).sp,
-        style = tabular,
-        maxLines = 1,
-    )
+private fun Hairline(modifier: Modifier = Modifier.fillMaxWidth()) {
+    Box(modifier) { Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.Hairline)) }
 }
 
+/** Paper section: title + note over a hairline, then content. No card, no fill. */
 @Composable
-private fun HeadlineRow(current: Long, previous: Long, comparison: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Figure(current)
-        Spacer(Modifier.width(10.dp))
-        Column {
-            DeltaPill(current, previous)
-            Text(comparison, color = Palette.Muted, fontSize = 9.sp, modifier = Modifier.padding(top = 2.dp))
+private fun Section(
+    title: String,
+    trailing: String? = null,
+    titleColor: Color = Palette.OnSurface,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text(title, color = titleColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (trailing != null) Text(trailing, color = Palette.Muted, fontSize = 11.sp)
         }
+        Hairline(Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 6.dp))
+        content()
     }
 }
 
 @Composable
-private fun DeltaPill(current: Long, previous: Long) {
+private fun DeltaLine(current: Long, previous: Long, comparison: String) {
     val pct = percentChange(current, previous)
-    val (text, color) = when {
-        pct == null -> "new" to Palette.Muted
-        pct > 0 -> "↑ $pct%" to Palette.Up
-        pct < 0 -> "↓ ${-pct}%" to Palette.Down
-        else -> "± 0%" to Palette.Muted
+    val color = when {
+        pct == null || pct == 0 -> Palette.Muted
+        pct > 0 -> Palette.Up
+        else -> Palette.Down
     }
-    Text(
-        text,
-        color = color,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Medium,
-        style = tabular,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 7.dp, vertical = 1.dp),
-    )
-}
-
-@Composable
-private fun Hairline() {
-    Box(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(1.dp).background(Palette.SurfaceHigh))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(signedPercent(current, previous) ?: "new", color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, style = tabular)
+        Spacer(Modifier.width(5.dp))
+        Text(comparison, color = Palette.Muted, fontSize = 11.sp)
+    }
 }
 
 @Composable
 private fun MetricRow(m: MetricSet) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        MiniStat("Sessions", m.sessions)
-        MiniStat("Views", m.views)
-        MiniStat("New", m.newUsers)
+    Hairline(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp))
+    Row(Modifier.fillMaxWidth()) {
+        MiniStat("Sessions", m.sessions, Modifier.weight(1f))
+        MiniStat("Views", m.views, Modifier.weight(1f))
+        MiniStat("New", m.newUsers, Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun MiniStat(label: String, value: Long) {
-    Column {
+private fun MiniStat(label: String, value: Long, modifier: Modifier = Modifier) {
+    Column(modifier) {
         Text(compact(value), color = Palette.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium, style = tabular)
         Text(label, color = Palette.Muted, fontSize = 9.sp)
     }
 }
 
 @Composable
-private fun RankedPanel(title: String, items: List<RankedItem>) {
+private fun Ranked(title: String, items: List<RankedItem>) {
     val max = items.maxOfOrNull { it.value }?.coerceAtLeast(1) ?: 1
-    Panel {
-        Eyebrow(title)
-        Spacer(Modifier.height(6.dp))
+    Section(title) {
         items.forEachIndexed { i, item ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    item.label,
-                    color = Palette.OnSurface,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+            Row(Modifier.fillMaxWidth().padding(top = if (i == 0) 0.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(item.label, color = Palette.OnSurface, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
-                Text(compact(item.value), color = Palette.Muted, fontSize = 12.sp, style = tabular)
+                Text(full(item.value), color = Palette.Muted, fontSize = 12.sp, style = tabular)
             }
-            ShareBar(
-                item.value.toFloat() / max,
-                if (i == 0) Palette.Accent else Palette.Accent.copy(alpha = 0.55f),
-                Modifier.padding(top = 3.dp, bottom = if (i == items.lastIndex) 0.dp else 7.dp),
-            )
+            ShareBar(item.value.toFloat() / max, if (i == 0) Palette.Accent else Palette.BarMuted, Modifier.padding(top = 3.dp))
         }
     }
 }
 
 @Composable
 private fun Notice(title: String, message: String, accent: Color = Palette.Down) {
-    Panel {
-        Eyebrow(title, color = accent)
-        Text(message, color = Palette.OnSurface, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+    Section(title, titleColor = accent) {
+        Text(message, color = Palette.OnSurface, fontSize = 12.sp)
     }
 }
 
 @Composable
 private fun Spinner() {
     CircularProgressIndicator(
-        modifier = Modifier.size(28.dp),
-        indicatorColor = Palette.Accent,
-        trackColor = Palette.SurfaceHigh,
-        strokeWidth = 3.dp,
+        modifier = Modifier.size(26.dp),
+        indicatorColor = Palette.OnSurface,
+        trackColor = Palette.Track,
+        strokeWidth = 2.dp,
     )
 }
 
@@ -463,40 +490,30 @@ private fun ChipIcon(res: Int) {
     Icon(painter = painterResource(res), contentDescription = null, modifier = Modifier.size(ChipDefaults.IconSize))
 }
 
+/** Outlined, hairline-bordered chip: Paper's button style. */
 @Composable
-private fun flatChipColors(): ChipColors = ChipDefaults.chipColors(
-    backgroundColor = Palette.Surface,
-    contentColor = Palette.OnSurface,
-    secondaryContentColor = Palette.Muted,
-    iconColor = Palette.Accent,
-)
-
-@Composable
-private fun accentChipColors(): ChipColors = ChipDefaults.chipColors(
-    backgroundColor = Palette.Accent,
-    contentColor = Palette.Ink,
-    secondaryContentColor = Palette.Ink,
-    iconColor = Palette.Ink,
-)
-
-@Composable
-private fun FlatChip(
+private fun PaperChip(
     label: String,
     icon: Int,
     secondary: String? = null,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    Chip(
+    OutlinedChip(
         onClick = onClick,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium) },
         secondaryLabel = if (secondary != null) {
             { Text(secondary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         } else {
             null
         },
         icon = { ChipIcon(icon) },
-        colors = flatChipColors(),
+        colors = ChipDefaults.outlinedChipColors(
+            contentColor = Palette.OnSurface,
+            secondaryContentColor = Palette.Muted,
+            iconColor = Palette.Accent,
+        ),
+        border = ChipDefaults.outlinedChipBorder(borderColor = Palette.Hairline),
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
     )

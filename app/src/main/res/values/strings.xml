@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">openAnalytics</string>
-    <string name="tile_label">Analytics</string>
+    <string name="tile_active">Active users</string>
+    <string name="tile_today_vs">Today vs yesterday</string>
+    <string name="tile_today_total">Today\'s users</string>
+    <string name="tile_us_clock">US clock</string>
 </resources>

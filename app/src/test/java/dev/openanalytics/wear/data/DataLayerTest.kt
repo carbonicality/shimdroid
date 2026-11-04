@@ -81,9 +81,33 @@ class DataLayerTest {
     }
 
     @Test
+    fun parsesHourlyIntoTwentyFourSlots() {
+        val report = JSONObject().put(
+            "rows",
+            JSONArray().put(row(listOf("00"), listOf("62"))).put(row(listOf("09"), listOf("284"))),
+        )
+        val h = Reports.hourly(report)
+        assertEquals(24, h.size)
+        assertEquals(62L, h[0])
+        assertEquals(284L, h[9])
+        assertEquals(0L, h[23])
+    }
+
+    @Test
+    fun realtimeWindowCoversTheLastNMinutes() {
+        val range = Reports.realtimeWindow(10).getJSONArray("minuteRanges").getJSONObject(0)
+        assertEquals(9, range.getInt("startMinutesAgo"))
+        assertEquals(0, range.getInt("endMinutesAgo"))
+        val now = Reports.realtimeWindow(1).getJSONArray("minuteRanges").getJSONObject(0)
+        assertEquals(0, now.getInt("startMinutesAgo"))
+        // Clamped to the 30-minute realtime window.
+        assertEquals(29, Reports.realtimeWindow(99).getJSONArray("minuteRanges").getJSONObject(0).getInt("startMinutesAgo"))
+    }
+
+    @Test
     fun summaryRequestUsesAtMostFourDateRanges() {
         val reqs = Reports.summaryBatch().getJSONArray("requests")
-        assertEquals(4, reqs.length())
+        assertEquals(5, reqs.length()) // batchRunReports max
         for (i in 0 until reqs.length()) assertTrue(reqs.getJSONObject(i).getJSONArray("dateRanges").length() <= 4)
     }
 
@@ -171,8 +195,23 @@ class DataLayerTest {
 class StatsSnapshotTest {
     @Test
     fun roundTripsThroughJson() {
-        val s = StatsSnapshot(7, 120, 100, 340, 900, 1000, 1_762_000_000_000)
+        val s = StatsSnapshot(
+            7, 120, 100, 340, 900, 1000, 1_762_000_000_000,
+            nowUsers = 3, todaySessions = 150,
+            perMinute = List(REALTIME_MINUTES) { it.toLong() },
+            hourly = List(24) { (it * 10).toLong() },
+        )
         assertEquals(s, StatsSnapshot.fromJson(s.toJson()))
+    }
+
+    @Test
+    fun readsSnapshotsFromOlderVersions() {
+        val old = """{"activeUsers":7,"todayUsers":120,"yesterdayUsers":100,"todayViews":340,""" +
+            """"last7Users":900,"prev7Users":1000,"updatedAtMs":5}"""
+        val s = StatsSnapshot.fromJson(old)!!
+        assertEquals(7L, s.activeUsers)
+        assertEquals(REALTIME_MINUTES, s.perMinute.size)
+        assertEquals(24, s.hourly.size)
     }
 
     @Test
@@ -184,11 +223,28 @@ class StatsSnapshotTest {
 
     @Test
     fun builtFromReports() {
-        val rt = Realtime(5, List(REALTIME_MINUTES) { 0L }, emptyList())
+        val rt = Realtime(5, 2, List(REALTIME_MINUTES) { 0L }, emptyList())
         val sum = Summary(
             MetricSet(10, 1, 2, 30), MetricSet(8), MetricSet(70), MetricSet(60),
             emptyList(), emptyList(), emptyList(),
         )
-        assertEquals(StatsSnapshot(5, 10, 8, 30, 70, 60, 42), StatsSnapshot.of(rt, sum, 42))
+        val snap = StatsSnapshot.of(rt, sum, 42)
+        assertEquals(StatsSnapshot(5, 10, 8, 30, 70, 60, 42, nowUsers = 2, todaySessions = 2), snap)
+    }
+}
+
+class RingGeometryTest {
+    @Test
+    fun nowIsAtThirtyDegreesAndOldestAtThreeThirty() {
+        assertEquals(30f, RingGeometry.angleFor(0), 0.01f)
+        assertEquals(330f, RingGeometry.angleFor(REALTIME_MINUTES - 1), 0.01f)
+    }
+
+    @Test
+    fun anglesMapBackToMinutes() {
+        for (m in 0 until REALTIME_MINUTES) assertEquals(m, RingGeometry.minuteAt(RingGeometry.angleFor(m)))
+        assertEquals(null, RingGeometry.minuteAt(0f)) // gap at 12 o'clock for the time
+        assertEquals(null, RingGeometry.minuteAt(-10f))
+        assertEquals(REALTIME_MINUTES - 1, RingGeometry.minuteAt(-30f)) // == 330°
     }
 }

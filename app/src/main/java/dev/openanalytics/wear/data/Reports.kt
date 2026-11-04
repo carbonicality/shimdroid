@@ -30,6 +30,18 @@ internal object Reports {
 
     fun realtimeTotal() = JSONObject().put("metrics", metrics("activeUsers"))
 
+    /** Unique users over the last [minutes] minutes (1 = the current minute). */
+    fun realtimeWindow(minutes: Int) = JSONObject()
+        .put("metrics", metrics("activeUsers"))
+        .put(
+            "minuteRanges",
+            JSONArray().put(
+                JSONObject()
+                    .put("startMinutesAgo", (minutes.coerceIn(1, REALTIME_MINUTES)) - 1)
+                    .put("endMinutesAgo", 0),
+            ),
+        )
+
     fun realtimePerMinute() = JSONObject()
         .put("dimensions", dimensions("minutesAgo"))
         .put("metrics", metrics("activeUsers"))
@@ -70,7 +82,12 @@ internal object Reports {
             .put("metrics", metrics("activeUsers"))
             .put("orderBys", orderByMetricDesc("activeUsers"))
             .put("limit", limit)
-        return JSONObject().put("requests", JSONArray().put(periods).put(daily).put(pages).put(countries))
+        val hourly = JSONObject()
+            .put("dateRanges", JSONArray().put(dateRange("today", "today")))
+            .put("dimensions", dimensions("hour"))
+            .put("metrics", metrics("activeUsers"))
+        // batchRunReports allows at most 5 requests.
+        return JSONObject().put("requests", JSONArray().put(periods).put(daily).put(pages).put(countries).put(hourly))
     }
 
     // ---- response parsers ----
@@ -102,6 +119,16 @@ internal object Reports {
         for (row in rows(report)) {
             val ago = dim(row, 0).toIntOrNull() ?: continue
             if (ago in 0 until minutes) out[minutes - 1 - ago] = metric(row, 0)
+        }
+        return out.toList()
+    }
+
+    /** 24 hourly values (hour 0..23); hours GA omitted become 0. */
+    fun hourly(report: JSONObject): List<Long> {
+        val out = LongArray(24)
+        for (row in rows(report)) {
+            val h = dim(row, 0).toIntOrNull() ?: continue
+            if (h in 0..23) out[h] = metric(row, 0)
         }
         return out.toList()
     }
@@ -139,6 +166,7 @@ internal object Reports {
             daily = daily(r(1), dates),
             topPages = ranked(r(2)),
             topCountries = ranked(r(3)),
+            hourlyToday = hourly(r(4)),
         )
     }
 }

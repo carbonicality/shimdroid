@@ -22,12 +22,19 @@ class AnalyticsClient(
             val total = async { runRealtime(Reports.realtimeTotal()) }
             val perMinute = async { runRealtime(Reports.realtimePerMinute()) }
             val screens = async { runRealtime(Reports.realtimeTopScreens()) }
+            val now = async { runRealtime(Reports.realtimeWindow(1)) }
             Realtime(
                 activeUsers = Reports.total(total.await()),
+                nowUsers = Reports.total(now.await()),
                 perMinute = Reports.perMinute(perMinute.await()),
                 topScreens = Reports.ranked(screens.await()),
             )
         }
+    }
+
+    /** Unique users over the last [minutes] minutes (1..30). */
+    suspend fun activeInLast(minutes: Int): Long = withContext(Dispatchers.IO) {
+        Reports.total(runRealtime(Reports.realtimeWindow(minutes)))
     }
 
     suspend fun summary(today: LocalDate = LocalDate.now()): Summary = withContext(Dispatchers.IO) {

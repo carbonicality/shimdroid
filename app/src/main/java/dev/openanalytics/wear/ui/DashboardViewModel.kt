@@ -11,10 +11,12 @@ import dev.openanalytics.wear.config.Analytics
 import dev.openanalytics.wear.config.NoPropertyException
 import dev.openanalytics.wear.data.AnalyticsClient
 import dev.openanalytics.wear.data.GaProperty
+import dev.openanalytics.wear.data.REALTIME_MINUTES
 import dev.openanalytics.wear.data.Realtime
 import dev.openanalytics.wear.data.StatsSnapshot
 import dev.openanalytics.wear.data.Summary
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +39,10 @@ data class DashboardState(
     val updatedAt: LocalTime? = null,
     /** Google wants the user to approve access; the UI launches this then calls [DashboardViewModel.consentHandled]. */
     val consentIntent: Intent? = null,
+    /** Minute-ring selection: unique users over the last [windowMinutes] minutes (1..30). */
+    val windowMinutes: Int = REALTIME_MINUTES,
+    /** Null while that window is being fetched. */
+    val windowUsers: Long? = null,
 )
 
 class DashboardViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,6 +53,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var summaryFetchedAtMs = 0L
     private var job: Job? = null
     private var propertiesJob: Job? = null
+    private var windowJob: Job? = null
+    /** Window size -> users, valid until the next realtime refresh. */
+    private val windowCache = mutableMapOf<Int, Long>()
 
     init {
         syncStage()
@@ -123,6 +132,39 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         syncStage()
     }
 
+    /** Minute ring / bezel moved. */
+    fun selectWindow(minutes: Int) {
+        val n = minutes.coerceIn(1, REALTIME_MINUTES)
+        if (n == _state.value.windowMinutes && _state.value.windowUsers != null) return
+        _state.update { it.copy(windowMinutes = n) }
+        resolveWindow()
+    }
+
+    private fun resolveWindow() {
+        val st = _state.value
+        val n = st.windowMinutes
+        val rt = st.realtime
+        val known = when {
+            rt == null -> null
+            n == REALTIME_MINUTES -> rt.activeUsers
+            n == 1 -> rt.nowUsers
+            else -> windowCache[n]
+        }
+        windowJob?.cancel()
+        _state.update { it.copy(windowUsers = known) }
+        if (known != null || rt == null) return
+        windowJob = viewModelScope.launch {
+            delay(WINDOW_DEBOUNCE_MS) // let the bezel settle before querying
+            try {
+                val users = Analytics.client(ctx).activeInLast(n)
+                windowCache[n] = users
+                if (_state.value.windowMinutes == n) _state.update { it.copy(windowUsers = users) }
+            } catch (e: Exception) {
+                handleError(e)
+            }
+        }
+    }
+
     fun consentHandled() {
         _state.update { it.copy(consentIntent = null) }
     }
@@ -145,6 +187,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update {
                     it.copy(realtime = realtime, summary = summary, error = null, updatedAt = LocalTime.now())
                 }
+                windowCache.clear()
+                resolveWindow()
                 if (summary != null) {
                     Analytics.saveSnapshot(ctx, StatsSnapshot.of(realtime, summary, now))
                     Analytics.requestTileUpdate(ctx)
@@ -168,5 +212,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         const val REALTIME_INTERVAL_MS = 60_000L
         const val SUMMARY_TTL_MS = 10 * 60_000L
+        const val WINDOW_DEBOUNCE_MS = 350L
     }
 }

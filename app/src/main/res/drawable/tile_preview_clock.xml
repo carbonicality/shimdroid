@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tile picker preview: four US time zones. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp" android:height="192dp" android:viewportWidth="192" android:viewportHeight="192">
+    <path android:fillColor="#1D1C1A" android:pathData="M96,0a96,96 0,1 1,0 192a96,96 0,1 1,0 -192z" />
+    <path android:fillColor="#EDE9E1" android:pathData="M46,46h22v6h-22z" />
+    <path android:fillColor="#3A3833" android:pathData="M46,58h100v1h-100z" />
+    <path android:fillColor="#EDE9E1" android:pathData="M58,70h40v6h-40zM118,68h28v10h-28zM58,96h34v6h-34zM118,94h28v10h-28zM58,122h30v6h-30zM118,120h28v10h-28zM58,148h44v6h-44zM118,146h28v10h-28z" />
+    <path android:fillColor="#8EA8FF" android:pathData="M46,70h6v6h-6zM46,96h6v6h-6zM46,122h6v6h-6zM46,148h6v6h-6z" />
+</vector>

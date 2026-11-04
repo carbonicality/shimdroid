@@ -16,7 +16,10 @@ data class DailyPoint(val date: LocalDate, val users: Long)
 
 /** Realtime snapshot (GA4 realtime window = last 30 minutes). */
 data class Realtime(
+    /** Unique users in the last 30 minutes. */
     val activeUsers: Long,
+    /** Unique users in the current minute. */
+    val nowUsers: Long,
     /** Active users per minute, oldest first. Always [REALTIME_MINUTES] entries. */
     val perMinute: List<Long>,
     val topScreens: List<RankedItem>,
@@ -33,6 +36,8 @@ data class Summary(
     val daily: List<DailyPoint>,
     val topPages: List<RankedItem>,
     val topCountries: List<RankedItem>,
+    /** Active users per hour today (index = hour 0..23, property time zone). */
+    val hourlyToday: List<Long> = List(24) { 0L },
 )
 
 const val REALTIME_MINUTES = 30

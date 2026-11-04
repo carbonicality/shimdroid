@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tile picker preview: today's total with hourly bars. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp" android:height="192dp" android:viewportWidth="192" android:viewportHeight="192">
+    <path android:fillColor="#1D1C1A" android:pathData="M96,0a96,96 0,1 1,0 192a96,96 0,1 1,0 -192z" />
+    <path android:fillColor="#EDE9E1" android:pathData="M46,50h36v6h-36z" />
+    <path android:fillColor="#3A3833" android:pathData="M46,62h100v1h-100z" />
+    <path android:fillColor="#EDE9E1" android:pathData="M46,72h70v24h-70z" />
+    <path android:fillColor="#45423C" android:pathData="M46,134h6v6h-6zM55,136h6v4h-6zM64,130h6v10h-6zM73,124h6v16h-6zM82,118h6v22h-6zM91,112h6v28h-6z" />
+    <path android:fillColor="#8EA8FF" android:pathData="M100,116h6v24h-6z" />
+    <path android:fillColor="#2B2A27" android:pathData="M109,138h37v2h-37z" />
+    <path android:fillColor="#EDE9E1" android:pathData="M46,140h100v1h-100z" />
+</vector>

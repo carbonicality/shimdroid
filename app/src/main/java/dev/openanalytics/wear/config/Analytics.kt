@@ -7,7 +7,9 @@ import dev.openanalytics.wear.data.AnalyticsClient
 import dev.openanalytics.wear.data.ConfigException
 import dev.openanalytics.wear.data.GaProperty
 import dev.openanalytics.wear.data.StatsSnapshot
-import dev.openanalytics.wear.tile.StatsTileService
+import dev.openanalytics.wear.tile.ActiveTileService
+import dev.openanalytics.wear.tile.TodayTotalTileService
+import dev.openanalytics.wear.tile.TodayVsYesterdayTileService
 
 class NoPropertyException : ConfigException("Choose a GA4 property in the app")
 
@@ -58,9 +60,12 @@ object Analytics {
         selectProperty(context, null)
     }
 
-    /** Asks the system to re-render the tile (e.g. after the app fetched fresh data). */
+    /** Asks the system to re-render the analytics tiles (e.g. after the app fetched fresh data). */
     fun requestTileUpdate(context: Context) {
-        runCatching { TileService.getUpdater(context).requestUpdate(StatsTileService::class.java) }
+        val updater = runCatching { TileService.getUpdater(context) }.getOrNull() ?: return
+        for (tile in listOf(ActiveTileService::class.java, TodayVsYesterdayTileService::class.java, TodayTotalTileService::class.java)) {
+            runCatching { updater.requestUpdate(tile) }
+        }
     }
 
     private fun prefs(context: Context) =

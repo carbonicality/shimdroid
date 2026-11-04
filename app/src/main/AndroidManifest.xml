@@ -31,9 +31,9 @@
         </activity>
 
         <service
-            android:name=".tile.StatsTileService"
+            android:name=".tile.ActiveTileService"
             android:exported="true"
-            android:label="@string/tile_label"
+            android:label="@string/tile_active"
             android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
             <intent-filter>
                 <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
@@ -42,5 +42,45 @@
                 android:name="androidx.wear.tiles.PREVIEW"
                 android:resource="@drawable/tile_preview" />
         </service>
+
+        <service
+            android:name=".tile.TodayVsYesterdayTileService"
+            android:exported="true"
+            android:label="@string/tile_today_vs"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview_vs" />
+        </service>
+
+        <service
+            android:name=".tile.TodayTotalTileService"
+            android:exported="true"
+            android:label="@string/tile_today_total"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview_total" />
+        </service>
+
+        <service
+            android:name=".tile.UsClockTileService"
+            android:exported="true"
+            android:label="@string/tile_us_clock"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview_clock" />
+        </service>
+
     </application>
 </manifest>

@@ -9,6 +9,7 @@ import dev.openanalytics.wear.data.StatsSnapshot
 import dev.openanalytics.wear.data.Summary
 import dev.openanalytics.wear.ui.DashboardState
 import dev.openanalytics.wear.ui.Stage
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -19,6 +20,7 @@ object SampleData {
 
     val realtime = Realtime(
         activeUsers = 47,
+        nowUsers = 12,
         perMinute = listOf(
             1, 2, 1, 3, 2, 2, 4, 3, 5, 4, 3, 6, 5, 4, 7,
             6, 5, 8, 6, 7, 9, 8, 6, 7, 10, 9, 8, 11, 9, 12,
@@ -55,6 +57,8 @@ object SampleData {
             RankedItem("India", 860),
             RankedItem("Canada", 540),
         ),
+        // Users per hour so far (00:00-10:59), sums to today's 1,284.
+        hourlyToday = listOf(62, 44, 35, 28, 32, 55, 110, 174, 237, 284, 223).map { it.toLong() } + List(13) { 0L },
     )
 
     val dashboard = DashboardState(
@@ -64,7 +68,12 @@ object SampleData {
         realtime = realtime,
         summary = summary,
         updatedAt = LocalTime.of(10, 9),
+        windowMinutes = 30,
+        windowUsers = 47,
     )
+
+    /** Bezel turned back to 10 minutes. */
+    val dashboard10Min = dashboard.copy(windowMinutes = 10, windowUsers = 34)
 
     val picker = DashboardState(
         stage = Stage.PickProperty,
@@ -77,6 +86,9 @@ object SampleData {
     )
 
     val signIn = DashboardState(stage = Stage.SignIn)
+
+    /** 10:09 UK time on Wed 4 Nov 2026 = 05:09 in New York. */
+    val clockInstant: Instant = Instant.parse("2026-11-04T10:09:00Z")
 
     val snapshot = StatsSnapshot.of(
         realtime, summary,

@@ -22,8 +22,7 @@ import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.tiles.renderer.TileRenderer
 import com.github.takahirom.roborazzi.captureRoboImage
-import dev.openanalytics.wear.tile.TileContent
-import dev.openanalytics.wear.tile.tileLayout
+import dev.openanalytics.wear.tile.Tiles
 import dev.openanalytics.wear.ui.AppActions
 import dev.openanalytics.wear.ui.DashboardState
 import dev.openanalytics.wear.ui.OpenAnalyticsApp
@@ -65,29 +64,40 @@ abstract class ScreenshotBase(private val folder: String) {
         compose.onRoot().captureRoboImage("screenshots/$folder/$name.png")
     }
 
-    private fun app(name: String, state: DashboardState, centerItem: Int = 1) = shoot(name) {
+    private fun app(name: String, state: DashboardState, centerItem: Int = 1, page: Int = 0) = shoot(name) {
         OpenAnalyticsApp(
             state = state,
             actions = AppActions(),
             listState = rememberScalingLazyListState(initialCenterItemIndex = centerItem),
             timeText = { TimeText(timeSource = FixedTime) }, // stable images across runs
+            initialPage = page,
         )
     }
 
-    @Test fun dashboard1ActiveNow() = app("01-active-now", SampleData.dashboard, centerItem = 1)
-    @Test fun dashboard2Today() = app("02-today", SampleData.dashboard, centerItem = 2)
-    @Test fun dashboard3Week() = app("03-last-7-days", SampleData.dashboard, centerItem = 3)
-    @Test fun dashboard4TopPages() = app("04-top-pages-now", SampleData.dashboard, centerItem = 4)
-    @Test fun dashboard5Countries() = app("05-top-countries", SampleData.dashboard, centerItem = 6)
-    @Test fun dashboard6Settings() = app("06-refresh-and-settings", SampleData.dashboard, centerItem = 8)
-    @Test fun signIn() = app("07-sign-in", SampleData.signIn, centerItem = 1)
-    @Test fun pickProperty() = app("08-choose-property", SampleData.picker, centerItem = 2)
+    // App, page 1: the minute ring.
+    @Test fun ring30() = app("01-ring-past-30-min", SampleData.dashboard)
+    @Test fun ring10() = app("02-ring-past-10-min", SampleData.dashboard10Min)
+    // App, page 2: the dashboard list.
+    @Test fun today() = app("03-today", SampleData.dashboard, centerItem = 1, page = 1)
+    @Test fun week() = app("04-last-7-days", SampleData.dashboard, centerItem = 2, page = 1)
+    @Test fun pagesNow() = app("05-pages-now", SampleData.dashboard, centerItem = 3, page = 1)
+    @Test fun countries() = app("06-countries", SampleData.dashboard, centerItem = 5, page = 1)
+    @Test fun settings() = app("07-refresh-and-settings", SampleData.dashboard, centerItem = 7, page = 1)
+    @Test fun signIn() = app("08-sign-in", SampleData.signIn, centerItem = 1)
+    @Test fun pickProperty() = app("09-choose-property", SampleData.picker, centerItem = 2)
 
-    @Test fun tile() = tile("09-tile", TileContent.Stats(SampleData.snapshot, stale = false))
-    @Test fun tileOffline() = tile("10-tile-offline", TileContent.Stats(SampleData.snapshot, stale = true))
-    @Test fun tileSignedOut() = tile("11-tile-signed-out", TileContent.Message("Not signed in", "Open the app to sign in"))
+    // Tiles.
+    @Test fun tileActive() = tile("10-tile-active") { c, d -> Tiles.active(c, d, SampleData.snapshot, stale = false) }
+    @Test fun tileTodayVs() = tile("11-tile-today-vs-yesterday") { c, d -> Tiles.todayVsYesterday(c, d, SampleData.snapshot, stale = false) }
+    @Test fun tileTodayTotal() = tile("12-tile-today-total") { c, d -> Tiles.todayTotal(c, d, SampleData.snapshot, stale = false, currentHour = 10) }
+    @Test fun tileClock() = tile("13-tile-us-clock") { c, d -> Tiles.usClock(c, d, SampleData.clockInstant) }
+    @Test fun tileOffline() = tile("14-tile-active-offline") { c, d -> Tiles.active(c, d, SampleData.snapshot, stale = true) }
+    @Test fun tileSignedOut() = tile("15-tile-signed-out") { c, d -> Tiles.message(c, d, "Not signed in", "Open the app to sign in") }
 
-    private fun tile(name: String, content: TileContent) = shoot(name) {
+    private fun tile(
+        name: String,
+        build: (android.content.Context, DeviceParametersBuilders.DeviceParameters) -> LayoutElementBuilders.LayoutElement,
+    ) = shoot(name) {
         val context = LocalContext.current
         val config = LocalConfiguration.current
         val device = DeviceParametersBuilders.DeviceParameters.Builder()
@@ -98,7 +108,7 @@ abstract class ScreenshotBase(private val folder: String) {
             .setDevicePlatform(DeviceParametersBuilders.DEVICE_PLATFORM_WEAR_OS)
             .build()
         val layout = LayoutElementBuilders.Layout.Builder()
-            .setRoot(tileLayout(context, device, content))
+            .setRoot(build(context, device))
             .build()
         val resources = ResourceBuilders.Resources.Builder().setVersion("1").build()
         AndroidView(

@@ -1,21 +1,26 @@
 # openAnalytics
 
-A standalone **Wear OS** app and tile that show your **Google Analytics 4** stats on your wrist. You build and sideload it yourself. It signs in with the Google account that's already on your watch.
+A standalone **Wear OS** app and set of tiles that show your **Google Analytics 4** stats on your wrist. You build and sideload it yourself. It signs in with the Google account that's already on your watch.
 
-| | |
+**The app** has two pages; swipe between them:
+
+1. **Minute ring:** 30 ticks around the edge, one per minute, sized by traffic. **Turn the bezel** (swipe around the edge on a Galaxy Watch 7) or **tap a tick** to choose how far back to count. The centre shows unique users in that window, plus **Now** and **Past 30 min**.
+2. **Dashboard:** Today (vs yesterday), Last 7 days (vs the prior week, with daily bars), pages people are on now, top pages and countries this week, then Refresh / Change property / Sign out.
+
+**Tiles.** Add any of these from the tile picker:
+
+| Tile | Shows |
 | --- | --- |
-| **Active now** | Realtime active users (last 30 min), with a per-minute sparkline |
-| **Today** | Users, change vs. yesterday, sessions, views, new users |
-| **Last 7 days** | Users, change vs. the previous 7 days, daily bar chart |
-| **Top pages now / 7d** | The most-viewed pages and screens |
-| **Top countries · 7d** | Where your users are |
-| **Tile** | Active now, plus Today and 7-day users with ▲/▼ |
+| **Active users** | Minute ring, unique users in the past 30 min, users right now |
+| **Today vs yesterday** | % change, with bars for today so far and all of yesterday |
+| **Today's users** | Today's total, an hourly bar chart, sessions and views |
+| **US clock** | New York, Chicago, Denver and Los Angeles, with a day/night marker |
 
 <p align="center">
-  <img src="docs/screenshots/galaxy-watch7-44mm/01-active-now.png" width="200" alt="Active now">
-  <img src="docs/screenshots/galaxy-watch7-44mm/02-today.png" width="200" alt="Today">
-  <img src="docs/screenshots/galaxy-watch7-44mm/03-last-7-days.png" width="200" alt="Last 7 days">
-  <img src="docs/screenshots/galaxy-watch7-44mm/09-tile.png" width="200" alt="Tile">
+  <img src="docs/screenshots/galaxy-watch7-44mm/02-ring-past-10-min.png" width="200" alt="Minute ring">
+  <img src="docs/screenshots/galaxy-watch7-44mm/03-today.png" width="200" alt="Today">
+  <img src="docs/screenshots/galaxy-watch7-44mm/11-tile-today-vs-yesterday.png" width="200" alt="Today vs yesterday tile">
+  <img src="docs/screenshots/galaxy-watch7-44mm/13-tile-us-clock.png" width="200" alt="US clock tile">
 </p>
 
 These are rendered with sample data at Galaxy Watch 7 44 mm size (480 px). CI re-renders them on every push. The full set, including 40 mm, is in [`docs/screenshots/`](docs/screenshots/).
@@ -59,15 +64,15 @@ The app doesn't need a client ID or any secret. Google matches it by package nam
    adb install -r app-debug.apk
    ```
 3. Open **openAnalytics** on the watch, tap **Sign in with Google**, allow access, and pick your property.
-4. To add the tile, swipe left from the watch face, then **+ → Analytics**.
+4. To add tiles, swipe left from the watch face, tap **+**, and pick **Active users**, **Today vs yesterday**, **Today's users** or **US clock**.
 
 Use **Change property** or **Sign out** at the bottom of the app to switch.
 
-## The tile
+## Tiles and refreshing
 
-The tile shows realtime users, plus Today and 7-day users with change indicators, and when it last updated. If it's red and says "offline", it's showing the last saved numbers. Tap the numbers to refresh, or tap **Open** for the full app.
+The three analytics tiles share one fetch. The system refreshes them about every 15 min, and while the app is open it pushes fresh numbers to them. If a tile can't connect, it shows its last numbers with a red "offline · time" line. Tapping any tile opens the app. The US clock tile needs no data; it updates every minute by itself.
 
-The system refreshes the tile about every 15 min. While the app is open it pushes fresh numbers to the tile. Realtime numbers in the app refresh every 60 s and the rest every 10 min. Nothing polls in the background.
+In the app, realtime numbers refresh every 60 s and the rest every 10 min. Nothing polls in the background.
 
 ## Troubleshooting
 
@@ -84,11 +89,13 @@ The system refreshes the tile about every 15 min. While the app is open it pushe
 app/src/main/java/dev/openanalytics/wear/
   data/      GA4 Data/Admin API client (plain JVM code, unit tested)
   auth/      Google account sign-in and tokens (Play services)
-  config/    selected property, cached snapshot for the tile
-  ui/        Compose for Wear OS screens, charts and the ViewModel
-  tile/      the Analytics tile (ProtoLayout)
+  config/    selected property, cached snapshot for the tiles
+  ui/        Compose for Wear OS screens, minute ring, charts, ViewModel
+  tile/      the four tiles (ProtoLayout)
 app/src/test/  unit tests, plus Robolectric/Roborazzi screenshot tests
 ```
+
+The app uses [DM Sans](https://github.com/googlefonts/dm-fonts) under the SIL Open Font License ([`licenses/DM-Sans-OFL.txt`](licenses/DM-Sans-OFL.txt)).
 
 - Unit tests: `./gradlew testDebugUnitTest`
 - Screenshots: `./gradlew recordRoborazziDebug` writes them to `app/screenshots/`
