@@ -241,7 +241,7 @@ object Tiles {
                     .addContent(hgap(7f))
                     .addContent(
                         fixedWidth(
-                            if (small) 80f else 90f,
+                            if (small) 74f else 90f,
                             LayoutElementBuilders.Column.Builder()
                                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
                                 .addContent(text(z.city, 12f, ON_SURFACE, medium = true))
