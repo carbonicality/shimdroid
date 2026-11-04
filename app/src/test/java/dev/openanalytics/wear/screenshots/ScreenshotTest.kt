@@ -19,9 +19,9 @@ import androidx.wear.compose.material.TimeSource
 import androidx.wear.compose.material.TimeText
 import androidx.wear.protolayout.DeviceParametersBuilders
 import androidx.wear.protolayout.LayoutElementBuilders
-import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.tiles.renderer.TileRenderer
 import com.github.takahirom.roborazzi.captureRoboImage
+import dev.openanalytics.wear.tile.TileText
 import dev.openanalytics.wear.tile.Tiles
 import dev.openanalytics.wear.ui.AppActions
 import dev.openanalytics.wear.ui.DashboardState
@@ -87,16 +87,16 @@ abstract class ScreenshotBase(private val folder: String) {
     @Test fun pickProperty() = app("09-choose-property", SampleData.picker, centerItem = 2)
 
     // Tiles.
-    @Test fun tileActive() = tile("10-tile-active") { c, d -> Tiles.active(c, d, SampleData.snapshot, stale = false) }
-    @Test fun tileTodayVs() = tile("11-tile-today-vs-yesterday") { c, d -> Tiles.todayVsYesterday(c, d, SampleData.snapshot, stale = false) }
-    @Test fun tileTodayTotal() = tile("12-tile-today-total") { c, d -> Tiles.todayTotal(c, d, SampleData.snapshot, stale = false, currentHour = 10) }
-    @Test fun tileClock() = tile("13-tile-us-clock") { c, d -> Tiles.usClock(c, d, SampleData.clockInstant) }
-    @Test fun tileOffline() = tile("14-tile-active-offline") { c, d -> Tiles.active(c, d, SampleData.snapshot, stale = true) }
-    @Test fun tileSignedOut() = tile("15-tile-signed-out") { c, d -> Tiles.message(c, d, "Not signed in", "Open the app to sign in") }
+    @Test fun tileActive() = tile("10-tile-active") { t, c, d -> t.active(c, d, SampleData.snapshot, stale = false) }
+    @Test fun tileTodayVs() = tile("11-tile-today-vs-yesterday") { t, c, d -> t.todayVsYesterday(c, d, SampleData.snapshot, stale = false) }
+    @Test fun tileTodayTotal() = tile("12-tile-today-total") { t, c, d -> t.todayTotal(c, d, SampleData.snapshot, stale = false, currentHour = 10) }
+    @Test fun tileClock() = tile("13-tile-us-clock") { t, c, d -> t.usClock(c, d, SampleData.clockInstant) }
+    @Test fun tileOffline() = tile("14-tile-active-offline") { t, c, d -> t.active(c, d, SampleData.snapshot, stale = true) }
+    @Test fun tileSignedOut() = tile("15-tile-signed-out") { t, c, d -> t.message(c, d, "Not signed in", "Open the app to sign in") }
 
     private fun tile(
         name: String,
-        build: (android.content.Context, DeviceParametersBuilders.DeviceParameters) -> LayoutElementBuilders.LayoutElement,
+        build: (Tiles, android.content.Context, DeviceParametersBuilders.DeviceParameters) -> LayoutElementBuilders.LayoutElement,
     ) = shoot(name) {
         val context = LocalContext.current
         val config = LocalConfiguration.current
@@ -107,10 +107,11 @@ abstract class ScreenshotBase(private val folder: String) {
             .setScreenShape(DeviceParametersBuilders.SCREEN_SHAPE_ROUND)
             .setDevicePlatform(DeviceParametersBuilders.DEVICE_PLATFORM_WEAR_OS)
             .build()
+        val fonts = TileText(context)
         val layout = LayoutElementBuilders.Layout.Builder()
-            .setRoot(build(context, device))
+            .setRoot(build(Tiles(fonts), context, device))
             .build()
-        val resources = ResourceBuilders.Resources.Builder().setVersion("1").build()
+        val resources = fonts.resources()
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->

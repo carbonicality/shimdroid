@@ -24,11 +24,12 @@ object Palette {
     val Down = Color(0xFFF29A8C)
 }
 
-/** DM Sans (variable font; the weight axis follows FontWeight). SIL OFL, see licenses/. */
+/** DM Sans, static weights (more reliable than the variable font on watches). SIL OFL, see licenses/. */
 val DmSans = FontFamily(
-    Font(R.font.dm_sans, FontWeight.Normal),
-    Font(R.font.dm_sans, FontWeight.Medium),
-    Font(R.font.dm_sans, FontWeight.SemiBold),
+    Font(R.font.dm_sans_regular, FontWeight.Normal),
+    Font(R.font.dm_sans_medium, FontWeight.Medium),
+    Font(R.font.dm_sans_semibold, FontWeight.SemiBold),
+    Font(R.font.dm_sans_semibold, FontWeight.Bold),
 )
 
 private val colors = Colors(

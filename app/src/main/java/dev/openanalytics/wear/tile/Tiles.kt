@@ -7,7 +7,6 @@ import androidx.wear.protolayout.DeviceParametersBuilders.DeviceParameters
 import androidx.wear.protolayout.DimensionBuilders.degrees
 import androidx.wear.protolayout.DimensionBuilders.dp
 import androidx.wear.protolayout.DimensionBuilders.expand
-import androidx.wear.protolayout.DimensionBuilders.sp
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.LayoutElementBuilders.LayoutElement
 import androidx.wear.protolayout.ModifiersBuilders
@@ -26,9 +25,11 @@ import java.util.Locale
 
 /**
  * The four tiles, in the app's "Paper, dark" style. Pure functions of their
- * inputs, so the screenshot tests render them directly.
+ * inputs (text is drawn in DM Sans via [fonts]), so the screenshot tests
+ * render them directly. After building a layout, hand `fonts.resources()` to
+ * the system.
  */
-object Tiles {
+class Tiles(private val fonts: TileText) {
     // Same palette as ui/Theme.kt.
     private val BG = 0xFF1D1C1A.toInt()
     private val HAIRLINE = 0xFF3A3833.toInt()
@@ -207,12 +208,14 @@ object Tiles {
 
     data class Zone(val city: String, val label: String, val id: ZoneId)
 
-    val US_ZONES = listOf(
-        Zone("New York", "Eastern · ET", ZoneId.of("America/New_York")),
-        Zone("Chicago", "Central · CT", ZoneId.of("America/Chicago")),
-        Zone("Denver", "Mountain · MT", ZoneId.of("America/Denver")),
-        Zone("Los Angeles", "Pacific · PT", ZoneId.of("America/Los_Angeles")),
-    )
+    companion object {
+        val US_ZONES = listOf(
+            Zone("New York", "Eastern · ET", ZoneId.of("America/New_York")),
+            Zone("Chicago", "Central · CT", ZoneId.of("America/Chicago")),
+            Zone("Denver", "Mountain · MT", ZoneId.of("America/Denver")),
+            Zone("Los Angeles", "Pacific · PT", ZoneId.of("America/Los_Angeles")),
+        )
+    }
 
     private val H_MM: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm", Locale.US)
     private val AMPM: DateTimeFormatter = DateTimeFormatter.ofPattern("a", Locale.US)
@@ -249,7 +252,7 @@ object Tiles {
                                 .build(),
                         ),
                     )
-                    .addContent(fixedWidth(if (small) 42f else 48f, text(t.format(H_MM), if (small) 16f else 18f, ON_SURFACE, medium = true), end = true))
+                    .addContent(fixedWidth(if (small) 42f else 48f, fonts.glyphs(t.format(H_MM), if (small) 16f else 18f, ON_SURFACE, TileText.Weight.Medium), end = true))
                     .addContent(hgap(3f))
                     .addContent(text(t.format(AMPM), 9f, MUTED))
                     .build(),
@@ -317,23 +320,14 @@ object Tiles {
     }
 
     private fun text(value: String, size: Float, color: Int, medium: Boolean = false, semi: Boolean = false): LayoutElement =
-        LayoutElementBuilders.Text.Builder()
-            .setText(value)
-            .setMaxLines(1)
-            .setFontStyle(
-                LayoutElementBuilders.FontStyle.Builder()
-                    .setSize(sp(size))
-                    .setColor(argb(color))
-                    .setWeight(
-                        when {
-                            semi -> LayoutElementBuilders.FONT_WEIGHT_BOLD
-                            medium -> LayoutElementBuilders.FONT_WEIGHT_MEDIUM
-                            else -> LayoutElementBuilders.FONT_WEIGHT_NORMAL
-                        },
-                    )
-                    .build(),
-            )
-            .build()
+        fonts.text(
+            value, size, color,
+            when {
+                semi -> TileText.Weight.SemiBold
+                medium -> TileText.Weight.Medium
+                else -> TileText.Weight.Regular
+            },
+        )
 
     private fun column(vararg items: LayoutElement): LayoutElement =
         LayoutElementBuilders.Column.Builder()
