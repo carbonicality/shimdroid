@@ -122,19 +122,21 @@ class Tiles(private val fonts: TileText) {
             else -> DOWN
         }
         val top = maxOf(s.todayUsers, s.yesterdayUsers).coerceAtLeast(1)
+        val small = device.screenWidthDp < 225
+        val w = if (small) 164f else 184f
         val body = LayoutElementBuilders.Column.Builder()
-            .setWidth(dp(184f))
+            .setWidth(dp(w))
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
-            .addContent(text("Today vs yesterday", 13f, ON_SURFACE, semi = true))
-            .addContent(gap(5f)).addContent(hairline(184f)).addContent(gap(8f))
-            .addContent(text(signedPercent(s.todayUsers, s.yesterdayUsers) ?: "new", 40f, deltaColor, medium = true))
+            .addContent(text("Today vs yesterday", if (small) 12f else 13f, ON_SURFACE, semi = true))
+            .addContent(gap(5f)).addContent(hairline(w)).addContent(gap(if (small) 5f else 8f))
+            .addContent(text(signedPercent(s.todayUsers, s.yesterdayUsers) ?: "new", if (small) 34f else 40f, deltaColor, medium = true))
             .addContent(text("users, today so far vs all of yesterday", 9f, MUTED))
             .addContent(gap(10f))
             .addContent(barRow("Today", s.todayUsers, top, ACCENT))
             .addContent(gap(6f))
             .addContent(barRow("Yesterday", s.yesterdayUsers, top, BAR_MUTED))
             .addContent(gap(8f))
-            .addContent(centered(184f, status(s, stale, at)))
+            .addContent(centered(w, status(s, stale, at)))
             .build()
         return frame(context, device, body)
     }
@@ -207,11 +209,11 @@ class Tiles(private val fonts: TileText) {
             .addContent(gap(4f))
             .addContent(
                 LayoutElementBuilders.Row.Builder()
-                    .addContent(text(full(s.todaySessions), 12f, ON_SURFACE, medium = true))
-                    .addContent(hgap(3f)).addContent(text("sessions", 10f, MUTED))
-                    .addContent(hgap(12f))
-                    .addContent(text(full(s.todayViews), 12f, ON_SURFACE, medium = true))
-                    .addContent(hgap(3f)).addContent(text("views", 10f, MUTED))
+                    .addContent(text(full(s.todaySessions), if (small) 11f else 12f, ON_SURFACE, medium = true))
+                    .addContent(hgap(3f)).addContent(text("sessions", if (small) 9f else 10f, MUTED))
+                    .addContent(hgap(if (small) 8f else 12f))
+                    .addContent(text(full(s.todayViews), if (small) 11f else 12f, ON_SURFACE, medium = true))
+                    .addContent(hgap(3f)).addContent(text("views", if (small) 9f else 10f, MUTED))
                     .build(),
             )
             .addContent(gap(4f))
