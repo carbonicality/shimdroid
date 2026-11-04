@@ -132,17 +132,17 @@ class Tiles(private val fonts: TileText) {
             .addContent(text(signedPercent(s.todayUsers, s.yesterdayUsers) ?: "new", if (small) 34f else 40f, deltaColor, medium = true))
             .addContent(text("users, today so far vs all of yesterday", 9f, MUTED))
             .addContent(gap(10f))
-            .addContent(barRow("Today", s.todayUsers, top, ACCENT))
+            .addContent(barRow("Today", s.todayUsers, top, ACCENT, small))
             .addContent(gap(6f))
-            .addContent(barRow("Yesterday", s.yesterdayUsers, top, BAR_MUTED))
+            .addContent(barRow("Yesterday", s.yesterdayUsers, top, BAR_MUTED, small))
             .addContent(gap(8f))
             .addContent(centered(w, status(s, stale, at)))
             .build()
         return frame(context, device, body)
     }
 
-    private fun barRow(label: String, value: Long, top: Long, color: Int): LayoutElement {
-        val trackW = 84f
+    private fun barRow(label: String, value: Long, top: Long, color: Int, small: Boolean): LayoutElement {
+        val trackW = if (small) 62f else 84f
         val fill = (trackW * value / top).coerceAtLeast(2f)
         return LayoutElementBuilders.Row.Builder()
             .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
