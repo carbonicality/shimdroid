@@ -46,7 +46,7 @@ object Tiles {
 
     fun active(context: Context, device: DeviceParameters, s: StatsSnapshot, stale: Boolean): LayoutElement {
         val max = (s.perMinute.maxOrNull() ?: 0).coerceAtLeast(1).toFloat()
-        val tickDeg = 3.4f
+        val tickDeg = 1.6f
         val arc = LayoutElementBuilders.Arc.Builder()
             .setAnchorAngle(degrees(RingGeometry.START_DEG - tickDeg / 2))
             .setAnchorType(LayoutElementBuilders.ARC_ANCHOR_START)
@@ -66,6 +66,12 @@ object Tiles {
                     .setLength(degrees(tickDeg))
                     .setThickness(dp(5f + 13f * (v / max)))
                     .setColor(argb(if (m == 0) ON_SURFACE else ACCENT))
+                    // Square ends: round caps turn short arcs into blobs.
+                    .setStrokeCap(
+                        LayoutElementBuilders.StrokeCapProp.Builder()
+                            .setValue(LayoutElementBuilders.STROKE_CAP_BUTT)
+                            .build(),
+                    )
                     .build(),
             )
         }
@@ -213,7 +219,7 @@ object Tiles {
     private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
 
     fun usClock(context: Context, device: DeviceParameters, at: Instant): LayoutElement {
-        val w = 190f
+        val w = 172f
         val body = LayoutElementBuilders.Column.Builder()
             .setWidth(dp(w))
             .addContent(
@@ -223,16 +229,16 @@ object Tiles {
         for ((i, z) in US_ZONES.withIndex()) {
             val t = at.atZone(z.id)
             val day = t.hour in 7..18
-            body.addContent(gap(6f))
+            body.addContent(gap(5f))
             body.addContent(
                 LayoutElementBuilders.Row.Builder()
                     .setWidth(dp(w))
                     .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
                     .addContent(if (day) dot(ACCENT) else ring(MUTED))
-                    .addContent(hgap(8f))
+                    .addContent(hgap(7f))
                     .addContent(
                         fixedWidth(
-                            104f,
+                            90f,
                             LayoutElementBuilders.Column.Builder()
                                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
                                 .addContent(text(z.city, 12f, ON_SURFACE, medium = true))
@@ -240,12 +246,12 @@ object Tiles {
                                 .build(),
                         ),
                     )
-                    .addContent(fixedWidth(50f, text(t.format(H_MM), 19f, ON_SURFACE, medium = true), end = true))
+                    .addContent(fixedWidth(48f, text(t.format(H_MM), 18f, ON_SURFACE, medium = true), end = true))
                     .addContent(hgap(3f))
                     .addContent(text(t.format(AMPM), 9f, MUTED))
                     .build(),
             )
-            body.addContent(gap(6f))
+            body.addContent(gap(5f))
             if (i < US_ZONES.lastIndex) body.addContent(rect(w, 1f, TRACK))
         }
         return frame(context, device, body.build())
