@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # to commit refreshed screenshots
     steps:
       - uses: actions/checkout@v4
 
@@ -45,3 +47,21 @@ jobs:
           name: openAnalytics-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Keep docs/screenshots in the repo up to date so the README (and anyone
+      # without artifact access) can see them. GITHUB_TOKEN pushes don't
+      # re-trigger this workflow.
+      - name: Commit screenshots
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          rm -rf docs/screenshots
+          mkdir -p docs
+          cp -r app/screenshots docs/screenshots
+          git add -A docs/screenshots
+          if git diff --cached --quiet; then echo "Screenshots unchanged"; exit 0; fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Update screenshots"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

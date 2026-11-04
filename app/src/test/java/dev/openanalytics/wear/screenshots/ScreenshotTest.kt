@@ -16,6 +16,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.material.TimeSource
+import androidx.wear.compose.material.TimeText
 import androidx.wear.protolayout.DeviceParametersBuilders
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.ResourceBuilders
@@ -40,6 +42,11 @@ import java.util.concurrent.Executor
 private const val GW7_44MM = "w240dp-h240dp-small-notlong-round-watch-xhdpi-keyshidden-nonav"
 private const val GW7_40MM = "w216dp-h216dp-small-notlong-round-watch-xhdpi-keyshidden-nonav"
 
+private object FixedTime : TimeSource {
+    override val currentTime: String
+        @Composable get() = "10:09"
+}
+
 /**
  * Renders the app and tile with sample data. Run `./gradlew recordRoborazziDebug`;
  * PNGs land in app/screenshots/.
@@ -63,6 +70,7 @@ abstract class ScreenshotBase(private val folder: String) {
             state = state,
             actions = AppActions(),
             listState = rememberScalingLazyListState(initialCenterItemIndex = centerItem),
+            timeText = { TimeText(timeSource = FixedTime) }, // stable images across runs
         )
     }
 

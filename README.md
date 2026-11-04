@@ -11,7 +11,14 @@ A standalone **Wear OS** app and tile that show your **Google Analytics 4** stat
 | **Top countries · 7d** | Where your users are |
 | **Tile** | Active now, plus Today and 7-day users with ▲/▼ |
 
-Screenshots for Galaxy Watch 7 (40 mm and 44 mm) are rendered on every CI run. Download them from the **`screenshots`** artifact on the run's page.
+<p align="center">
+  <img src="docs/screenshots/galaxy-watch7-44mm/01-active-now.png" width="200" alt="Active now">
+  <img src="docs/screenshots/galaxy-watch7-44mm/02-today.png" width="200" alt="Today">
+  <img src="docs/screenshots/galaxy-watch7-44mm/03-last-7-days.png" width="200" alt="Last 7 days">
+  <img src="docs/screenshots/galaxy-watch7-44mm/09-tile.png" width="200" alt="Tile">
+</p>
+
+These are rendered with sample data at Galaxy Watch 7 44 mm size (480 px). CI re-renders them on every push. The full set, including 40 mm, is in [`docs/screenshots/`](docs/screenshots/).
 
 ## How sign-in works
 

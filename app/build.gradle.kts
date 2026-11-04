@@ -97,6 +97,7 @@ dependencies {
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.43.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.43.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.43.0")
-    testImplementation("androidx.wear.tiles:tiles-renderer:1.4.1")
+    // debug (not test) so its resources are merged and visible to Robolectric
+    debugImplementation("androidx.wear.tiles:tiles-renderer:1.4.1")
     testImplementation("androidx.test.ext:junit:1.2.1")
 }

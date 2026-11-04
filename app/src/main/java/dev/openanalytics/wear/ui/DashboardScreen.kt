@@ -121,9 +121,10 @@ fun OpenAnalyticsApp(
     state: DashboardState,
     actions: AppActions,
     listState: ScalingLazyListState = rememberScalingLazyListState(),
+    timeText: @Composable () -> Unit = { TimeText() },
 ) {
     Scaffold(
-        timeText = { TimeText() },
+        timeText = timeText,
         vignette = { Vignette(vignettePosition = VignettePosition.TopAndBottom) },
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
     ) {
