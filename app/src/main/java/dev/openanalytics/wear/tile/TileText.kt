@@ -35,9 +35,12 @@ class TileText(private val context: Context) {
     private val images = LinkedHashMap<String, Rendered>()
 
     /** One run of text as a single image. */
-    fun text(value: String, sizeSp: Float, color: Int, weight: Weight = Weight.Regular): LayoutElement {
-        val id = "t" + Integer.toHexString("$value|$sizeSp|$color|$weight".hashCode())
-        val img = images.getOrPut(id) { render(value, sizeSp, color, weight) }
+    fun text(value: String, sizeSp: Float, color: Int, weight: Weight = Weight.Regular): LayoutElement =
+        image(value, sizeSp, color, weight, padDp = 1f)
+
+    private fun image(value: String, sizeSp: Float, color: Int, weight: Weight, padDp: Float): LayoutElement {
+        val id = "t" + Integer.toHexString("$value|$sizeSp|$color|$weight|$padDp".hashCode())
+        val img = images.getOrPut(id) { render(value, sizeSp, color, weight, padDp) }
         return LayoutElementBuilders.Image.Builder()
             .setResourceId(id)
             .setWidth(dp(img.widthDp))
@@ -62,7 +65,8 @@ class TileText(private val context: Context) {
                     .setSemantics(ModifiersBuilders.Semantics.Builder().setContentDescription(value).build())
                     .build(),
             )
-        for (ch in value) row.addContent(text(ch.toString(), sizeSp, color, weight))
+        // No side padding, so glyphs sit at their natural advance width.
+        for (ch in value) row.addContent(image(ch.toString(), sizeSp, color, weight, padDp = 0f))
         return row.build()
     }
 
@@ -77,7 +81,7 @@ class TileText(private val context: Context) {
 
     private val typefaces = HashMap<Weight, Typeface>()
 
-    private fun render(value: String, sizeSp: Float, color: Int, weight: Weight): Rendered {
+    private fun render(value: String, sizeSp: Float, color: Int, weight: Weight, padDp: Float): Rendered {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
             typeface = typefaces.getOrPut(weight) {
                 ResourcesCompat.getFont(context, weight.font) ?: Typeface.DEFAULT
@@ -87,7 +91,7 @@ class TileText(private val context: Context) {
             // No "tnum": in DM Sans it also widens spaces, commas and colons.
         }
         val fm = paint.fontMetrics
-        val pad = 1f * density
+        val pad = padDp * density
         val w = ceil(paint.measureText(value) + pad * 2).toInt().coerceAtLeast(1)
         val h = ceil(fm.descent - fm.ascent).toInt().coerceAtLeast(1)
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

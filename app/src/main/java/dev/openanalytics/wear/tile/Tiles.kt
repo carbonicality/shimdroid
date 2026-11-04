@@ -134,7 +134,7 @@ class Tiles(private val fonts: TileText) {
             .addContent(gap(6f))
             .addContent(barRow("Yesterday", s.yesterdayUsers, top, BAR_MUTED))
             .addContent(gap(8f))
-            .addContent(status(s, stale, at))
+            .addContent(centered(184f, status(s, stale, at)))
             .build()
         return frame(context, device, body)
     }
@@ -169,11 +169,14 @@ class Tiles(private val fonts: TileText) {
         at: Instant = Instant.now(),
     ): LayoutElement {
         val max = (s.hourly.maxOrNull() ?: 0).coerceAtLeast(1).toFloat()
-        val barW = 5.5f
-        val barGap = 1.8f
+        // Smaller watches (e.g. Galaxy Watch 7 40 mm) get a shorter, narrower layout.
+        val small = device.screenWidthDp < 225
+        val barW = if (small) 4.6f else 5.2f
+        val barGap = if (small) 1.5f else 1.7f
+        val barH = if (small) 26f else 32f
         val chartW = 24 * barW + 23 * barGap
         val bars = LayoutElementBuilders.Row.Builder()
-            .setHeight(dp(44f))
+            .setHeight(dp(barH))
             .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_BOTTOM)
         for (h in 0 until 24) {
             if (h > 0) bars.addContent(hgap(barGap))
@@ -181,7 +184,7 @@ class Tiles(private val fonts: TileText) {
             bars.addContent(
                 when {
                     h > currentHour -> rect(barW, 2f, TRACK)
-                    else -> rect(barW, maxOf(2f, 44f * v / max), if (h == currentHour) ACCENT else BAR_MUTED)
+                    else -> rect(barW, maxOf(2f, barH * v / max), if (h == currentHour) ACCENT else BAR_MUTED)
                 },
             )
         }
@@ -194,14 +197,14 @@ class Tiles(private val fonts: TileText) {
             .setWidth(dp(chartW))
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
             .addContent(spread(chartW, text("Today", 13f, ON_SURFACE, semi = true), text("total users", 10f, MUTED)))
-            .addContent(gap(5f)).addContent(hairline(chartW)).addContent(gap(4f))
-            .addContent(text(full(s.todayUsers), 40f, ON_SURFACE, medium = true))
+            .addContent(gap(4f)).addContent(hairline(chartW)).addContent(gap(2f))
+            .addContent(text(full(s.todayUsers), if (small) 28f else 34f, ON_SURFACE, medium = true))
             .addContent(gap(2f))
             .addContent(bars.build())
             .addContent(rect(chartW, 1f, ON_SURFACE))
             .addContent(gap(2f))
             .addContent(axis.build())
-            .addContent(gap(6f))
+            .addContent(gap(4f))
             .addContent(
                 LayoutElementBuilders.Row.Builder()
                     .addContent(text(full(s.todaySessions), 12f, ON_SURFACE, medium = true))
@@ -211,8 +214,8 @@ class Tiles(private val fonts: TileText) {
                     .addContent(hgap(3f)).addContent(text("views", 10f, MUTED))
                     .build(),
             )
-            .addContent(gap(6f))
-            .addContent(status(s, stale, at))
+            .addContent(gap(4f))
+            .addContent(centered(chartW, status(s, stale, at)))
             .build()
         return frame(context, device, body)
     }
@@ -418,6 +421,13 @@ class Tiles(private val fonts: TileText) {
             .setHorizontalAlignment(
                 if (end) LayoutElementBuilders.HORIZONTAL_ALIGN_END else LayoutElementBuilders.HORIZONTAL_ALIGN_START,
             )
+            .addContent(content)
+            .build()
+
+    private fun centered(w: Float, content: LayoutElement): LayoutElement =
+        LayoutElementBuilders.Box.Builder()
+            .setWidth(dp(w))
+            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
             .addContent(content)
             .build()
 
