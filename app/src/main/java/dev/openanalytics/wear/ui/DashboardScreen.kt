@@ -1,5 +1,7 @@
 package dev.openanalytics.wear.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +32,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
+import androidx.wear.compose.foundation.lazy.ScalingLazyListState
+import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
@@ -44,6 +49,8 @@ import androidx.wear.compose.material.TitleCard
 import androidx.wear.compose.material.Vignette
 import androidx.wear.compose.material.VignettePosition
 import dev.openanalytics.wear.R
+import dev.openanalytics.wear.auth.GoogleAuth
+import dev.openanalytics.wear.data.GaProperty
 import dev.openanalytics.wear.data.MetricSet
 import dev.openanalytics.wear.data.RankedItem
 import kotlinx.coroutines.delay
@@ -51,16 +58,43 @@ import java.time.format.DateTimeFormatter
 
 private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
+/** Everything the UI can ask for. */
+class AppActions(
+    val signIn: () -> Unit = {},
+    val pickProperty: (GaProperty) -> Unit = {},
+    val reloadProperties: () -> Unit = {},
+    val changeProperty: () -> Unit = {},
+    val signOut: () -> Unit = {},
+    val refresh: () -> Unit = {},
+)
+
+/** Wires the ViewModel, Google sign-in / consent activities and foreground polling to [OpenAnalyticsApp]. */
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel) {
+fun DashboardRoute(viewModel: DashboardViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val listState = rememberScalingLazyListState()
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Poll while the app is in the foreground; stop when it isn't (saves battery & quota).
+    val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        viewModel.onSignInResult(it.data)
+    }
+    val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        viewModel.syncStage()
+        if (viewModel.state.value.stage == Stage.PickProperty) viewModel.loadProperties()
+        else viewModel.refresh(forceSummary = true)
+    }
+
+    LaunchedEffect(state.consentIntent) {
+        state.consentIntent?.let {
+            viewModel.consentHandled()
+            consentLauncher.launch(it)
+        }
+    }
+
+    // Poll while visible; stop in the background (saves battery & API quota).
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            viewModel.reloadConfig()
+            viewModel.syncStage()
             while (true) {
                 viewModel.refresh()
                 delay(DashboardViewModel.REALTIME_INTERVAL_MS)
@@ -68,6 +102,26 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
         }
     }
 
+    OpenAnalyticsApp(
+        state = state,
+        actions = AppActions(
+            signIn = { signInLauncher.launch(GoogleAuth.signInIntent(context)) },
+            pickProperty = viewModel::selectProperty,
+            reloadProperties = viewModel::loadProperties,
+            changeProperty = viewModel::changeProperty,
+            signOut = viewModel::signOut,
+            refresh = { viewModel.refresh(forceSummary = true) },
+        ),
+    )
+}
+
+/** Stateless UI; also rendered by the screenshot tests. */
+@Composable
+fun OpenAnalyticsApp(
+    state: DashboardState,
+    actions: AppActions,
+    listState: ScalingLazyListState = rememberScalingLazyListState(),
+) {
     Scaffold(
         timeText = { TimeText() },
         vignette = { Vignette(vignettePosition = VignettePosition.TopAndBottom) },
@@ -79,125 +133,192 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
             autoCentering = AutoCenteringParams(itemIndex = 0),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            item {
-                ListHeader {
-                    Text(
-                        text = state.propertyName ?: "openAnalytics",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colors.primary,
-                    )
-                }
-            }
-
-            val configError = state.configError
-            if (configError != null) {
-                setupItems(configError, onRetry = { viewModel.reloadConfig(); viewModel.refresh(forceSummary = true) })
-                return@ScalingLazyColumn
-            }
-
-            state.error?.let { err -> item { MessageCard("Couldn't load", err, MaterialTheme.colors.error) } }
-
-            if (state.realtime == null && state.summary == null) {
-                item {
-                    if (state.loading) CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                }
-            }
-
-            state.realtime?.let { rt ->
-                item {
-                    StatCard(title = "Active now", subtitle = "last 30 min") {
-                        BigNumber(rt.activeUsers, Up)
-                        Sparkline(rt.perMinute, Up, Modifier.padding(top = 4.dp))
-                    }
-                }
-            }
-
-            state.summary?.let { s ->
-                item {
-                    StatCard(title = "Today", subtitle = "users") {
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            BigNumber(s.today.activeUsers, MaterialTheme.colors.primary)
-                            Spacer(Modifier.width(6.dp))
-                            Delta(s.today.activeUsers, s.yesterday.activeUsers, "vs yday")
-                        }
-                        MetricRow(s.today)
-                    }
-                }
-                item {
-                    StatCard(title = "Last 7 days", subtitle = "users") {
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            BigNumber(s.last7.activeUsers, MaterialTheme.colors.secondary)
-                            Spacer(Modifier.width(6.dp))
-                            Delta(s.last7.activeUsers, s.prev7.activeUsers, "vs prev")
-                        }
-                        BarChart(s.daily.map { it.users }, MaterialTheme.colors.secondary, Modifier.padding(vertical = 4.dp))
-                        MetricRow(s.last7)
-                    }
-                }
-            }
-
-            state.realtime?.topScreens?.takeIf { it.isNotEmpty() }?.let { items ->
-                item { RankedCard("Top pages now", items) }
-            }
-            state.summary?.let { s ->
-                if (s.topPages.isNotEmpty()) item { RankedCard("Top pages · 7d", s.topPages) }
-                if (s.topCountries.isNotEmpty()) item { RankedCard("Top countries · 7d", s.topCountries) }
-            }
-
-            val updatedAt = state.updatedAt
-            item {
-                Chip(
-                    onClick = { viewModel.refresh(forceSummary = true) },
-                    label = { Text(if (state.loading) "Refreshing…" else "Refresh") },
-                    secondaryLabel = if (updatedAt != null) {
-                        { Text("Updated ${updatedAt.format(TIME_FMT)}") }
-                    } else {
-                        null
-                    },
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_refresh),
-                            contentDescription = null,
-                            modifier = Modifier.size(ChipDefaults.IconSize),
-                        )
-                    },
-                    colors = ChipDefaults.secondaryChipColors(),
-                    enabled = !state.loading,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            state.propertyId?.let { id ->
-                item {
-                    Text(
-                        "Property $id",
-                        style = MaterialTheme.typography.caption3,
-                        color = Muted,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+            when (state.stage) {
+                Stage.SignIn -> signInItems(state, actions)
+                Stage.PickProperty -> pickPropertyItems(state, actions)
+                Stage.Dashboard -> dashboardItems(state, actions)
             }
         }
     }
 }
 
-private fun ScalingLazyListScope.setupItems(message: String, onRetry: () -> Unit) {
-    item { MessageCard("Setup needed", message, MaterialTheme.colors.primary) }
+private fun ScalingLazyListScope.header(text: String) {
     item {
-        MessageCard(
-            "How to",
-            "Run scripts/provision.sh from your computer with the watch connected via ADB, then tap Retry.",
-            Muted,
+        ListHeader {
+            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colors.primary)
+        }
+    }
+}
+
+private fun ScalingLazyListScope.signInItems(state: DashboardState, actions: AppActions) {
+    header("openAnalytics")
+    item {
+        Text(
+            "Your Google Analytics stats, on your wrist.",
+            style = MaterialTheme.typography.body2,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 8.dp),
         )
     }
+    state.error?.let { err -> item { MessageCard("Couldn't sign in", err, MaterialTheme.colors.error) } }
     item {
         Chip(
-            onClick = onRetry,
-            label = { Text("Retry") },
+            onClick = actions.signIn,
+            label = { Text("Sign in with Google") },
+            icon = { AppIcon(R.drawable.ic_account) },
             colors = ChipDefaults.primaryChipColors(),
             modifier = Modifier.fillMaxWidth(),
         )
     }
+    item {
+        Text(
+            "Uses the Google account on this watch. Read-only access.",
+            style = MaterialTheme.typography.caption3,
+            color = Muted,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+private fun ScalingLazyListScope.pickPropertyItems(state: DashboardState, actions: AppActions) {
+    header("Choose property")
+    state.email?.let { email ->
+        item { Text(email, style = MaterialTheme.typography.caption3, color = Muted, maxLines = 1) }
+    }
+    state.error?.let { err -> item { MessageCard("Couldn't load", err, MaterialTheme.colors.error) } }
+    val props = state.properties
+    when {
+        props == null && state.loading -> item { CircularProgressIndicator(Modifier.size(32.dp)) }
+        props == null -> item { RetryChip(actions.reloadProperties) }
+        props.isEmpty() -> {
+            item { MessageCard("No properties", "This account has no GA4 properties it can read.", Muted) }
+            item { SignOutChip(actions.signOut) }
+        }
+        else -> {
+            items(props) { p ->
+                Chip(
+                    onClick = { actions.pickProperty(p) },
+                    label = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    secondaryLabel = { Text(p.account.ifBlank { p.id }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    icon = { AppIcon(R.drawable.ic_chart) },
+                    colors = ChipDefaults.secondaryChipColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item { SignOutChip(actions.signOut) }
+        }
+    }
+}
+
+private fun ScalingLazyListScope.dashboardItems(state: DashboardState, actions: AppActions) {
+    header(state.property?.name ?: "openAnalytics")
+
+    state.error?.let { err -> item { MessageCard("Couldn't load", err, MaterialTheme.colors.error) } }
+
+    if (state.realtime == null && state.summary == null && state.loading) {
+        item { CircularProgressIndicator(modifier = Modifier.size(32.dp)) }
+    }
+
+    state.realtime?.let { rt ->
+        item {
+            StatCard(title = "Active now", subtitle = "30 min") {
+                BigNumber(rt.activeUsers, Up)
+                Sparkline(rt.perMinute, Up, Modifier.padding(top = 4.dp))
+            }
+        }
+    }
+
+    state.summary?.let { s ->
+        item {
+            StatCard(title = "Today", subtitle = "users") {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    BigNumber(s.today.activeUsers, Amber)
+                    Spacer(Modifier.width(6.dp))
+                    Delta(s.today.activeUsers, s.yesterday.activeUsers, "vs yday")
+                }
+                MetricRow(s.today)
+            }
+        }
+        item {
+            StatCard(title = "Last 7 days", subtitle = "users") {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    BigNumber(s.last7.activeUsers, Blue)
+                    Spacer(Modifier.width(6.dp))
+                    Delta(s.last7.activeUsers, s.prev7.activeUsers, "vs prev")
+                }
+                BarChart(s.daily.map { it.users }, Blue, Modifier.padding(vertical = 4.dp))
+                MetricRow(s.last7)
+            }
+        }
+    }
+
+    state.realtime?.topScreens?.takeIf { it.isNotEmpty() }?.let { items ->
+        item { RankedCard("Top pages now", items) }
+    }
+    state.summary?.let { s ->
+        if (s.topPages.isNotEmpty()) item { RankedCard("Top pages · 7d", s.topPages) }
+        if (s.topCountries.isNotEmpty()) item { RankedCard("Top countries · 7d", s.topCountries) }
+    }
+
+    val updatedAt = state.updatedAt
+    item {
+        Chip(
+            onClick = actions.refresh,
+            label = { Text(if (state.loading) "Refreshing…" else "Refresh") },
+            secondaryLabel = if (updatedAt != null) {
+                { Text("Updated ${updatedAt.format(TIME_FMT)}") }
+            } else {
+                null
+            },
+            icon = { AppIcon(R.drawable.ic_refresh) },
+            colors = ChipDefaults.secondaryChipColors(),
+            enabled = !state.loading,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    item {
+        Chip(
+            onClick = actions.changeProperty,
+            label = { Text("Change property") },
+            secondaryLabel = { Text(state.property?.name ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            icon = { AppIcon(R.drawable.ic_chart) },
+            colors = ChipDefaults.secondaryChipColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    item { SignOutChip(actions.signOut, state.email) }
+}
+
+@Composable
+private fun AppIcon(res: Int) {
+    Icon(painter = painterResource(res), contentDescription = null, modifier = Modifier.size(ChipDefaults.IconSize))
+}
+
+@Composable
+private fun RetryChip(onClick: () -> Unit) {
+    Chip(
+        onClick = onClick,
+        label = { Text("Retry") },
+        icon = { AppIcon(R.drawable.ic_refresh) },
+        colors = ChipDefaults.primaryChipColors(),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun SignOutChip(onClick: () -> Unit, email: String? = null) {
+    Chip(
+        onClick = onClick,
+        label = { Text("Sign out") },
+        secondaryLabel = if (email != null) {
+            { Text(email, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        } else {
+            null
+        },
+        icon = { AppIcon(R.drawable.ic_account) },
+        colors = ChipDefaults.childChipColors(),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -277,7 +398,7 @@ private fun RankedCard(title: String, items: List<RankedItem>) {
                     compact(item.value),
                     style = MaterialTheme.typography.caption2,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colors.primary,
+                    color = Amber,
                 )
             }
         }

@@ -71,9 +71,9 @@ interface Http {
                 }
             }?.takeIf { it.isNotBlank() } ?: text.take(200).ifBlank { "no details" }
             val hint = when (status) {
-                401 -> " (check the service account key)"
-                403 -> " (add the service account email as a Viewer on the GA4 property, " +
-                    "and enable the Google Analytics Data API in its Cloud project)"
+                401 -> " (sign in again)"
+                403 -> " (your account needs at least Viewer access to this property, and the " +
+                    "Google Analytics Data + Admin APIs must be enabled in your Cloud project)"
                 429 -> " (GA quota exhausted, try again later)"
                 else -> ""
             }

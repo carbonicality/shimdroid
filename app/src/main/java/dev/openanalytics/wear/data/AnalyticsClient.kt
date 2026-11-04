@@ -4,12 +4,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.time.LocalDate
 
 /** Read-only client for one GA4 property, via the Analytics Data API. */
 class AnalyticsClient(
     propertyId: String,
-    private val tokens: TokenProvider,
+    private val tokens: AccessTokenSource,
     private val http: Http = Http.Default,
 ) {
     val propertyId: String = normalizePropertyId(propertyId)
@@ -30,24 +31,20 @@ class AnalyticsClient(
     }
 
     suspend fun summary(today: LocalDate = LocalDate.now()): Summary = withContext(Dispatchers.IO) {
-        val res = http.postJson("$base:batchRunReports", Reports.summaryBatch(), tokens.accessToken())
+        val res = tokens.withToken { http.postJson("$base:batchRunReports", Reports.summaryBatch(), it) }
         Reports.summary(res, today)
     }
 
-    /** Property display name via the Admin API; null if unavailable (API not enabled, etc.). */
-    suspend fun propertyName(): String? = withContext(Dispatchers.IO) {
-        runCatching {
-            http.get("$ADMIN_API/properties/$propertyId", tokens.accessToken())
-                .optString("displayName").ifBlank { null }
-        }.getOrNull()
-    }
-
-    private fun runRealtime(body: org.json.JSONObject) =
-        http.postJson("$base:runRealtimeReport", body, tokens.accessToken())
+    private fun runRealtime(body: JSONObject) =
+        tokens.withToken { http.postJson("$base:runRealtimeReport", body, it) }
 
     companion object {
         const val DATA_API = "https://analyticsdata.googleapis.com/v1beta"
         const val ADMIN_API = "https://analyticsadmin.googleapis.com/v1beta"
+
+        /** All GA4 properties the signed-in user can read (Admin API). */
+        suspend fun listProperties(tokens: AccessTokenSource, http: Http = Http.Default): List<GaProperty> =
+            withContext(Dispatchers.IO) { Properties.list(http, tokens) }
 
         /** Accepts "123456789" or "properties/123456789". */
         fun normalizePropertyId(raw: String): String {

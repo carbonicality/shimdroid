@@ -1,20 +1,9 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("io.github.takahirom.roborazzi")
 }
-
-// Optional build-time default GA4 property ID. Set it in local.properties
-// (ga.propertyId=123456789) or the GA_PROPERTY_ID env var. You can also
-// provision it at runtime instead; see README.md.
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-val defaultPropertyId: String =
-    (localProps.getProperty("ga.propertyId") ?: System.getenv("GA_PROPERTY_ID") ?: "").trim()
 
 android {
     namespace = "dev.openanalytics.wear"
@@ -24,16 +13,29 @@ android {
         applicationId = "dev.openanalytics.wear"
         minSdk = 30 // Wear OS 3+
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
-        buildConfigField("String", "GA_PROPERTY_ID", "\"$defaultPropertyId\"")
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        // A fixed key checked into the repo, so every build (local or CI) has the
+        // same SHA-1 to register with your Google OAuth client. Fine for a
+        // sideloaded personal app; see README if you want your own key.
+        create("shared") {
+            storeFile = file("openanalytics-debug.keystore")
+            storePassword = "android"
+            keyAlias = "openanalytics"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
             isMinifyEnabled = false
-            // Sideload-friendly: sign release with the debug key unless you configure your own.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("shared")
         }
     }
 
@@ -46,8 +48,14 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+roborazzi {
+    outputDir.set(file("screenshots"))
 }
 
 dependencies {
@@ -67,6 +75,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 
+    // Google account sign-in + OAuth tokens via Play services
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+
     // Tile
     implementation("androidx.wear.tiles:tiles:1.4.1")
     implementation("androidx.wear.protolayout:protolayout:1.2.1")
@@ -77,4 +88,15 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real org.json for JVM unit tests
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
+
+    // Screenshot tests (Robolectric + Roborazzi)
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.43.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.43.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-junit-rule:1.43.0")
+    testImplementation("androidx.wear.tiles:tiles-renderer:1.4.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
 }

@@ -38,7 +38,7 @@ data class Summary(
 const val REALTIME_MINUTES = 30
 
 /** Bad or missing local configuration (credentials / property ID). */
-class ConfigException(message: String) : Exception(message)
+open class ConfigException(message: String) : Exception(message)
 
 /** An error response from a Google API. */
 class ApiException(val status: Int, message: String) : Exception(message)

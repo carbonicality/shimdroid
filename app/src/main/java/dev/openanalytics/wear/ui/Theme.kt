@@ -10,11 +10,12 @@ val Orange = Color(0xFFE37400)
 val Up = Color(0xFF81C995)
 val Down = Color(0xFFF28B82)
 val Muted = Color(0xFFBDC1C6)
+val Blue = Color(0xFF8AB4F8)
 
 private val colors = Colors(
     primary = Amber,
     primaryVariant = Orange,
-    secondary = Color(0xFF8AB4F8),
+    secondary = Blue,
     onPrimary = Color.Black,
 )
 

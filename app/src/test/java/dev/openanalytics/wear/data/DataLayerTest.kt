@@ -5,73 +5,9 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.KeyPairGenerator
-import java.security.Signature
-import java.security.interfaces.RSAPublicKey
 import java.time.LocalDate
-import java.util.Base64
 
 class DataLayerTest {
-
-    private val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-
-    private fun serviceAccountJson(): String {
-        val b64 = Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(keyPair.private.encoded)
-        val pem = "-----BEGIN PRIVATE KEY-----\n$b64\n-----END PRIVATE KEY-----\n"
-        return JSONObject()
-            .put("type", "service_account")
-            .put("client_email", "ga-reader@example.iam.gserviceaccount.com")
-            .put("private_key", pem)
-            .put("token_uri", "https://oauth2.googleapis.com/token")
-            .toString()
-    }
-
-    @Test
-    fun jwtAssertionIsValidAndVerifiable() {
-        val sa = ServiceAccount.fromJson(serviceAccountJson())
-        val jwt = TokenProvider(sa).createAssertion(1_700_000_000)
-        val parts = jwt.split(".")
-        assertEquals(3, parts.size)
-
-        val dec = Base64.getUrlDecoder()
-        val header = JSONObject(String(dec.decode(parts[0])))
-        val claims = JSONObject(String(dec.decode(parts[1])))
-        assertEquals("RS256", header.getString("alg"))
-        assertEquals("ga-reader@example.iam.gserviceaccount.com", claims.getString("iss"))
-        assertEquals(TokenProvider.SCOPE, claims.getString("scope"))
-        assertEquals(1_700_003_600L, claims.getLong("exp"))
-
-        val ok = Signature.getInstance("SHA256withRSA").run {
-            initVerify(keyPair.public as RSAPublicKey)
-            update("${parts[0]}.${parts[1]}".toByteArray())
-            verify(dec.decode(parts[2]))
-        }
-        assertTrue(ok)
-    }
-
-    @Test
-    fun tokenIsCachedUntilNearExpiry() {
-        var calls = 0
-        var now = 0L
-        val http = object : Http {
-            override fun request(method: String, url: String, headers: Map<String, String>, body: String?): JSONObject {
-                calls++
-                assertTrue(body!!.contains("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer"))
-                return JSONObject().put("access_token", "tok$calls").put("expires_in", 3600)
-            }
-        }
-        val tp = TokenProvider(ServiceAccount.fromJson(serviceAccountJson()), http) { now }
-        assertEquals("tok1", tp.accessToken())
-        now = 3_000_000 // 50 min
-        assertEquals("tok1", tp.accessToken())
-        now = 3_550_000 // within the 60 s refresh margin
-        assertEquals("tok2", tp.accessToken())
-    }
-
-    @Test(expected = ConfigException::class)
-    fun rejectsNonServiceAccountJson() {
-        ServiceAccount.fromJson("""{"type":"authorized_user"}""")
-    }
 
     @Test
     fun normalizesPropertyId() {
@@ -152,10 +88,81 @@ class DataLayerTest {
     }
 
     @Test
+    fun parsesAccountSummaries() {
+        val page = JSONObject().put(
+            "accountSummaries",
+            JSONArray()
+                .put(
+                    JSONObject().put("displayName", "My Company").put(
+                        "propertySummaries",
+                        JSONArray()
+                            .put(JSONObject().put("property", "properties/111").put("displayName", "Website"))
+                            .put(JSONObject().put("property", "properties/222").put("displayName", "App")),
+                    ),
+                )
+                .put(JSONObject().put("displayName", "Empty account")),
+        )
+        assertEquals(
+            listOf(GaProperty("111", "Website", "My Company"), GaProperty("222", "App", "My Company")),
+            Properties.parse(page),
+        )
+    }
+
+    @Test
+    fun listsPropertiesAcrossPages() {
+        val http = object : Http {
+            override fun request(method: String, url: String, headers: Map<String, String>, body: String?): JSONObject {
+                val acc = { id: String ->
+                    JSONArray().put(
+                        JSONObject().put("displayName", "A").put(
+                            "propertySummaries",
+                            JSONArray().put(JSONObject().put("property", "properties/$id").put("displayName", "P$id")),
+                        ),
+                    )
+                }
+                return if ("pageToken=" in url) JSONObject().put("accountSummaries", acc("2"))
+                else JSONObject().put("accountSummaries", acc("1")).put("nextPageToken", "next")
+            }
+        }
+        val tokens = object : AccessTokenSource {
+            override fun token() = "t"
+            override fun invalidate(token: String) {}
+        }
+        assertEquals(listOf("1", "2"), Properties.list(http, tokens).map { it.id })
+    }
+
+    @Test
+    fun retriesOnceWithFreshTokenAfter401() {
+        val issued = ArrayDeque(listOf("stale", "fresh"))
+        val invalidated = mutableListOf<String>()
+        val tokens = object : AccessTokenSource {
+            override fun token() = issued.removeFirst()
+            override fun invalidate(token: String) { invalidated += token }
+        }
+        val used = mutableListOf<String>()
+        val result = tokens.withToken { t ->
+            used += t
+            if (t == "stale") throw ApiException(401, "expired") else "ok"
+        }
+        assertEquals("ok", result)
+        assertEquals(listOf("stale", "fresh"), used)
+        assertEquals(listOf("stale"), invalidated)
+    }
+
+    @Test(expected = ApiException::class)
+    fun doesNotRetryOtherErrors() {
+        val tokens = object : AccessTokenSource {
+            override fun token() = "t"
+            override fun invalidate(token: String) = error("should not invalidate")
+        }
+        tokens.withToken<Unit> { throw ApiException(403, "forbidden") }
+    }
+
+    @Test
     fun errorMessagesIncludeHints() {
         val msg = Http.describeError(403, """{"error":{"code":403,"message":"User does not have sufficient permissions"}}""")
         assertTrue(msg.startsWith("HTTP 403: User does not have sufficient permissions"))
-        assertTrue(msg.contains("Viewer"))
+        assertTrue(msg.contains("Viewer access"))
         val oauth = Http.describeError(400, """{"error":"invalid_grant","error_description":"Invalid JWT Signature."}""")
         assertEquals("HTTP 400: Invalid JWT Signature.", oauth)
     }

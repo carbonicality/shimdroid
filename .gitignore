@@ -9,13 +9,14 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# Credentials: never commit these
-service-account*.json
-*-credentials.json
-app/src/main/assets/service-account.json
-property-id.txt
+# Never commit real credentials
+client_secret*.json
 
 # Signing
 *.jks
 *.keystore
+!app/openanalytics-debug.keystore
 keystore.properties
+
+# Screenshot test output (CI uploads these as an artifact)
+app/screenshots/

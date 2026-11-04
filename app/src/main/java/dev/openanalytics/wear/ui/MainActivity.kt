@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             OpenAnalyticsTheme {
-                DashboardScreen(viewModel)
+                DashboardRoute(viewModel)
             }
         }
     }
