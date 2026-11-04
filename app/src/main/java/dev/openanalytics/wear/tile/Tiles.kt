@@ -45,7 +45,13 @@ class Tiles(private val fonts: TileText) {
 
     // ------------------------------------------------------------ tile 1: minute ring
 
-    fun active(context: Context, device: DeviceParameters, s: StatsSnapshot, stale: Boolean): LayoutElement {
+    fun active(
+        context: Context,
+        device: DeviceParameters,
+        s: StatsSnapshot,
+        stale: Boolean,
+        at: Instant = Instant.now(),
+    ): LayoutElement {
         val max = (s.perMinute.maxOrNull() ?: 0).coerceAtLeast(1).toFloat()
         val tickDeg = 1.6f
         val arc = LayoutElementBuilders.Arc.Builder()
@@ -89,7 +95,7 @@ class Tiles(private val fonts: TileText) {
                 .addContent(text("${full(s.nowUsers)} right now", 12f, ON_SURFACE))
                 .build(),
             gap(6f),
-            status(s, stale),
+            status(s, stale, at),
         )
         val content = LayoutElementBuilders.Box.Builder()
             .setWidth(expand()).setHeight(expand())
@@ -102,7 +108,13 @@ class Tiles(private val fonts: TileText) {
 
     // ------------------------------------------------------------ tile 2: today vs yesterday
 
-    fun todayVsYesterday(context: Context, device: DeviceParameters, s: StatsSnapshot, stale: Boolean): LayoutElement {
+    fun todayVsYesterday(
+        context: Context,
+        device: DeviceParameters,
+        s: StatsSnapshot,
+        stale: Boolean,
+        at: Instant = Instant.now(),
+    ): LayoutElement {
         val pct = percentChange(s.todayUsers, s.yesterdayUsers)
         val deltaColor = when {
             pct == null || pct == 0 -> MUTED
@@ -122,7 +134,7 @@ class Tiles(private val fonts: TileText) {
             .addContent(gap(6f))
             .addContent(barRow("Yesterday", s.yesterdayUsers, top, BAR_MUTED))
             .addContent(gap(8f))
-            .addContent(status(s, stale))
+            .addContent(status(s, stale, at))
             .build()
         return frame(context, device, body)
     }
@@ -154,6 +166,7 @@ class Tiles(private val fonts: TileText) {
         s: StatsSnapshot,
         stale: Boolean,
         currentHour: Int = LocalTime.now().hour,
+        at: Instant = Instant.now(),
     ): LayoutElement {
         val max = (s.hourly.maxOrNull() ?: 0).coerceAtLeast(1).toFloat()
         val barW = 5.5f
@@ -199,7 +212,7 @@ class Tiles(private val fonts: TileText) {
                     .build(),
             )
             .addContent(gap(6f))
-            .addContent(status(s, stale))
+            .addContent(status(s, stale, at))
             .build()
         return frame(context, device, body)
     }
@@ -209,6 +222,9 @@ class Tiles(private val fonts: TileText) {
     data class Zone(val city: String, val label: String, val id: ZoneId)
 
     companion object {
+        /** Washington DC (US Eastern). */
+        val DC: ZoneId = ZoneId.of("America/New_York")
+
         val US_ZONES = listOf(
             Zone("New York", "Eastern · ET", ZoneId.of("America/New_York")),
             Zone("Chicago", "Central · CT", ZoneId.of("America/Chicago")),
@@ -314,9 +330,25 @@ class Tiles(private val fonts: TileText) {
             .build()
     }
 
-    private fun status(s: StatsSnapshot, stale: Boolean): LayoutElement {
-        val t = HHMM.format(Instant.ofEpochMilli(s.updatedAtMs).atZone(ZoneId.systemDefault()))
-        return text(if (stale) "offline · $t" else "updated $t", 9f, if (stale) DOWN else MUTED)
+    /**
+     * Bottom line of every count tile: Washington DC time ("DC 5:09 AM"), plus
+     * "offline · <time of last data>" in coral when the numbers are stale.
+     * The time uses glyph images so per-minute timeline entries share them.
+     */
+    private fun status(s: StatsSnapshot, stale: Boolean, at: Instant): LayoutElement {
+        val dc = at.atZone(DC)
+        val row = LayoutElementBuilders.Row.Builder()
+            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+            .addContent(text("DC", 9f, MUTED, medium = true))
+            .addContent(hgap(4f))
+            .addContent(fonts.glyphs(dc.format(H_MM), 11f, ON_SURFACE, TileText.Weight.Medium))
+            .addContent(hgap(2f))
+            .addContent(text(dc.format(AMPM), 9f, MUTED))
+        if (stale) {
+            val t = HHMM.format(Instant.ofEpochMilli(s.updatedAtMs).atZone(ZoneId.systemDefault()))
+            row.addContent(hgap(6f)).addContent(text("offline · $t", 9f, DOWN))
+        }
+        return row.build()
     }
 
     private fun text(value: String, size: Float, color: Int, medium: Boolean = false, semi: Boolean = false): LayoutElement =

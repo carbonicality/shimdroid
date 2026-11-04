@@ -16,6 +16,8 @@ A standalone **Wear OS** app and set of tiles that show your **Google Analytics 
 | **Today's users** | Today's total, an hourly bar chart, sessions and views |
 | **US clock** | New York, Chicago, Denver and Los Angeles, with a day/night marker |
 
+The three count tiles and the app's ring page also show the current **Washington DC time** (US Eastern), updated every minute.
+
 <p align="center">
   <img src="docs/screenshots/galaxy-watch7-44mm/02-ring-past-10-min.png" width="200" alt="Minute ring">
   <img src="docs/screenshots/galaxy-watch7-44mm/03-today.png" width="200" alt="Today">
@@ -70,7 +72,7 @@ Use **Change property** or **Sign out** at the bottom of the app to switch.
 
 ## Tiles and refreshing
 
-The three analytics tiles share one fetch. The system refreshes them about every 15 min, and while the app is open it pushes fresh numbers to them. If a tile can't connect, it shows its last numbers with a red "offline · time" line. Tapping any tile opens the app. The US clock tile needs no data; it updates every minute by itself.
+The three analytics tiles share one fetch. The system refreshes them about every 15 min, and while the app is open it pushes fresh numbers to them. If a tile can't connect, it shows its last numbers with a red "offline · time" note next to the DC time. Tapping any tile opens the app. The US clock tile needs no data; it updates every minute by itself.
 
 In the app, realtime numbers refresh every 60 s and the rest every 10 min. Nothing polls in the background.
 

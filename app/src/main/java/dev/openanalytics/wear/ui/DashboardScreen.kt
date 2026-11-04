@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -73,7 +74,11 @@ import dev.openanalytics.wear.data.MetricSet
 import dev.openanalytics.wear.data.REALTIME_MINUTES
 import dev.openanalytics.wear.data.RankedItem
 import kotlinx.coroutines.delay
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -144,9 +149,11 @@ fun OpenAnalyticsApp(
     listState: ScalingLazyListState = rememberScalingLazyListState(),
     timeText: @Composable () -> Unit = { TimeText() },
     initialPage: Int = 0,
+    /** Pins the Washington DC clock (screenshot tests); null = live. */
+    fixedTime: Instant? = null,
 ) {
     if (state.stage == Stage.Dashboard) {
-        DashboardPager(state, actions, listState, timeText, initialPage)
+        DashboardPager(state, actions, listState, timeText, initialPage, fixedTime)
         return
     }
     Scaffold(
@@ -181,6 +188,7 @@ private fun DashboardPager(
     listState: ScalingLazyListState,
     timeText: @Composable () -> Unit,
     initialPage: Int,
+    fixedTime: Instant?,
 ) {
     val pager = rememberPagerState(initialPage = initialPage) { 2 }
     val indicator = remember(pager) {
@@ -204,7 +212,7 @@ private fun DashboardPager(
     ) {
         HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
             HierarchicalFocusCoordinator(requiresFocus = { pager.currentPage == page }) {
-                if (page == 0) RingPage(state, actions) else DashboardList(state, actions, listState)
+                if (page == 0) RingPage(state, actions, fixedTime) else DashboardList(state, actions, listState)
             }
         }
     }
@@ -213,7 +221,8 @@ private fun DashboardPager(
 /** Page 1: the minute ring. Bezel / crown or a tap on a tick picks how far back to count. */
 @OptIn(ExperimentalWearFoundationApi::class)
 @Composable
-fun RingPage(state: DashboardState, actions: AppActions) {
+fun RingPage(state: DashboardState, actions: AppActions, fixedTime: Instant? = null) {
+    val dc = rememberDcTime(fixedTime)
     val haptics = LocalHapticFeedback.current
     val minutes by rememberUpdatedState(state.windowMinutes)
     var acc by remember { mutableFloatStateOf(0f) }
@@ -265,6 +274,11 @@ fun RingPage(state: DashboardState, actions: AppActions) {
                 PairStat("Now", rt.nowUsers, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(30.dp).background(Palette.Hairline))
                 PairStat("Past 30 min", rt.activeUsers, Modifier.weight(1f))
+            }
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("DC", color = Palette.Muted, fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.width(4.dp))
+                Text(dc.format(DC_TIME), color = Palette.OnSurface, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -398,6 +412,23 @@ private fun ScalingLazyListScope.pickPropertyItems(state: DashboardState, action
 // ---------------------------------------------------------------- building blocks
 
 private const val ROTARY_STEP_PX = 36f
+
+/** Washington DC (US Eastern). */
+private val DC_ZONE: ZoneId = ZoneId.of("America/New_York")
+private val DC_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
+
+/** DC wall-clock time, ticking on the minute (or pinned to [fixed]). */
+@Composable
+private fun rememberDcTime(fixed: Instant?): ZonedDateTime {
+    if (fixed != null) return fixed.atZone(DC_ZONE)
+    val now by produceState(Instant.now()) {
+        while (true) {
+            delay(60_000L - System.currentTimeMillis() % 60_000L)
+            value = Instant.now()
+        }
+    }
+    return now.atZone(DC_ZONE)
+}
 private val tabular = TextStyle(fontFeatureSettings = "tnum")
 
 @Composable

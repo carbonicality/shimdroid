@@ -71,6 +71,7 @@ abstract class ScreenshotBase(private val folder: String) {
             listState = rememberScalingLazyListState(initialCenterItemIndex = centerItem),
             timeText = { TimeText(timeSource = FixedTime) }, // stable images across runs
             initialPage = page,
+            fixedTime = SampleData.clockInstant,
         )
     }
 
@@ -87,11 +88,11 @@ abstract class ScreenshotBase(private val folder: String) {
     @Test fun pickProperty() = app("09-choose-property", SampleData.picker, centerItem = 2)
 
     // Tiles.
-    @Test fun tileActive() = tile("10-tile-active") { t, c, d -> t.active(c, d, SampleData.snapshot, stale = false) }
-    @Test fun tileTodayVs() = tile("11-tile-today-vs-yesterday") { t, c, d -> t.todayVsYesterday(c, d, SampleData.snapshot, stale = false) }
-    @Test fun tileTodayTotal() = tile("12-tile-today-total") { t, c, d -> t.todayTotal(c, d, SampleData.snapshot, stale = false, currentHour = 10) }
+    @Test fun tileActive() = tile("10-tile-active") { t, c, d -> t.active(c, d, SampleData.snapshot, stale = false, at = SampleData.clockInstant) }
+    @Test fun tileTodayVs() = tile("11-tile-today-vs-yesterday") { t, c, d -> t.todayVsYesterday(c, d, SampleData.snapshot, stale = false, at = SampleData.clockInstant) }
+    @Test fun tileTodayTotal() = tile("12-tile-today-total") { t, c, d -> t.todayTotal(c, d, SampleData.snapshot, stale = false, currentHour = 10, at = SampleData.clockInstant) }
     @Test fun tileClock() = tile("13-tile-us-clock") { t, c, d -> t.usClock(c, d, SampleData.clockInstant) }
-    @Test fun tileOffline() = tile("14-tile-active-offline") { t, c, d -> t.active(c, d, SampleData.snapshot, stale = true) }
+    @Test fun tileOffline() = tile("14-tile-active-offline") { t, c, d -> t.active(c, d, SampleData.snapshot, stale = true, at = SampleData.clockInstant) }
     @Test fun tileSignedOut() = tile("15-tile-signed-out") { t, c, d -> t.message(c, d, "Not signed in", "Open the app to sign in") }
 
     private fun tile(

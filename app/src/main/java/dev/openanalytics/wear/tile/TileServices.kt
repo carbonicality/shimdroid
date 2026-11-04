@@ -33,32 +33,67 @@ private object ResourceCache {
     @Synchronized fun get(version: String): ResourceBuilders.Resources? = map[version]
 }
 
+private fun minuteNow() = System.currentTimeMillis() / 60_000L * 60_000L
+
+/** [count] one-minute timeline entries starting at [startMs]. */
+private fun perMinute(
+    startMs: Long,
+    count: Int,
+    layout: (Instant) -> LayoutElementBuilders.LayoutElement,
+): TimelineBuilders.Timeline {
+    val timeline = TimelineBuilders.Timeline.Builder()
+    for (i in 0 until count) {
+        val t = startMs + i * 60_000L
+        timeline.addTimelineEntry(
+            TimelineBuilders.TimelineEntry.Builder()
+                .setLayout(LayoutElementBuilders.Layout.Builder().setRoot(layout(Instant.ofEpochMilli(t))).build())
+                .setValidity(TimelineBuilders.TimeInterval.Builder().setStartMillis(t).setEndMillis(t + 60_000L).build())
+                .build(),
+        )
+    }
+    return timeline.build()
+}
+
 /** Base for the three analytics tiles; each only supplies its layout. */
 abstract class AnalyticsTileService : TileService() {
+    private companion object {
+        /** A little past the 15-minute refresh so the clock never runs out. */
+        const val ENTRIES = 30
+    }
+
     protected abstract fun Tiles.render(
         context: Context,
         device: DeviceParameters,
         snapshot: StatsSnapshot,
         stale: Boolean,
+        at: Instant,
     ): LayoutElementBuilders.LayoutElement
 
-    private fun build(device: DeviceParameters, content: TileContent): Pair<LayoutElementBuilders.LayoutElement, TileText> {
+    /**
+     * Stats get one timeline entry per minute (so the DC time ticks) for a bit
+     * longer than the refresh interval; all entries share the same glyph images.
+     */
+    private fun build(device: DeviceParameters, content: TileContent): Pair<TimelineBuilders.Timeline, TileText> {
         val fonts = TileText(applicationContext)
         val tiles = Tiles(fonts)
-        val root = when (content) {
-            is TileContent.Stats -> tiles.render(applicationContext, device, content.snapshot, content.stale)
-            is TileContent.Message -> tiles.message(applicationContext, device, content.title, content.body)
+        val timeline = when (content) {
+            is TileContent.Message -> TimelineBuilders.Timeline.fromLayoutElement(
+                tiles.message(applicationContext, device, content.title, content.body),
+            )
+            is TileContent.Stats -> perMinute(minuteNow(), ENTRIES) { at ->
+                tiles.render(applicationContext, device, content.snapshot, content.stale, at)
+            }
         }
-        return root to fonts
+        return timeline to fonts
     }
 
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> =
         SuspendToFutureAdapter.launchFuture {
-            val (root, fonts) = build(requestParams.deviceConfiguration, TileData.load(applicationContext))
+            val (timeline, fonts) = build(requestParams.deviceConfiguration, TileData.load(applicationContext))
             TileBuilders.Tile.Builder()
                 .setResourcesVersion(ResourceCache.put(fonts))
                 .setFreshnessIntervalMillis(15 * 60_000L)
-                .setTileTimeline(TimelineBuilders.Timeline.fromLayoutElement(root))
+                .setTileTimeline(timeline)
                 .build()
         }
 
@@ -77,20 +112,20 @@ abstract class AnalyticsTileService : TileService() {
 
 /** Tile 1: minute ring, past 30 minutes, right now. */
 class ActiveTileService : AnalyticsTileService() {
-    override fun Tiles.render(context: Context, device: DeviceParameters, snapshot: StatsSnapshot, stale: Boolean) =
-        active(context, device, snapshot, stale)
+    override fun Tiles.render(context: Context, device: DeviceParameters, snapshot: StatsSnapshot, stale: Boolean, at: Instant) =
+        active(context, device, snapshot, stale, at)
 }
 
 /** Tile 2: today so far vs yesterday. */
 class TodayVsYesterdayTileService : AnalyticsTileService() {
-    override fun Tiles.render(context: Context, device: DeviceParameters, snapshot: StatsSnapshot, stale: Boolean) =
-        todayVsYesterday(context, device, snapshot, stale)
+    override fun Tiles.render(context: Context, device: DeviceParameters, snapshot: StatsSnapshot, stale: Boolean, at: Instant) =
+        todayVsYesterday(context, device, snapshot, stale, at)
 }
 
 /** Tile 3: today's total with an hourly chart. */
 class TodayTotalTileService : AnalyticsTileService() {
-    override fun Tiles.render(context: Context, device: DeviceParameters, snapshot: StatsSnapshot, stale: Boolean) =
-        todayTotal(context, device, snapshot, stale)
+    override fun Tiles.render(context: Context, device: DeviceParameters, snapshot: StatsSnapshot, stale: Boolean, at: Instant) =
+        todayTotal(context, device, snapshot, stale, at = at)
 }
 
 /**
@@ -102,26 +137,8 @@ class UsClockTileService : TileService() {
     private fun build(device: DeviceParameters, startMs: Long): Pair<TimelineBuilders.Timeline, TileText> {
         val fonts = TileText(applicationContext)
         val tiles = Tiles(fonts)
-        val timeline = TimelineBuilders.Timeline.Builder()
-        for (i in 0 until 60) {
-            val t = startMs + i * 60_000L
-            timeline.addTimelineEntry(
-                TimelineBuilders.TimelineEntry.Builder()
-                    .setLayout(
-                        LayoutElementBuilders.Layout.Builder()
-                            .setRoot(tiles.usClock(applicationContext, device, Instant.ofEpochMilli(t)))
-                            .build(),
-                    )
-                    .setValidity(
-                        TimelineBuilders.TimeInterval.Builder().setStartMillis(t).setEndMillis(t + 60_000L).build(),
-                    )
-                    .build(),
-            )
-        }
-        return timeline.build() to fonts
+        return perMinute(startMs, 60) { at -> tiles.usClock(applicationContext, device, at) } to fonts
     }
-
-    private fun minuteNow() = System.currentTimeMillis() / 60_000L * 60_000L
 
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> =
         SuspendToFutureAdapter.launchFuture {
