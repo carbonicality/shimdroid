@@ -160,3 +160,28 @@ class DataLayerTest {
         assertEquals("HTTP 400: Invalid JWT Signature.", oauth)
     }
 }
+
+class StatsSnapshotTest {
+    @Test
+    fun roundTripsThroughJson() {
+        val s = StatsSnapshot(7, 120, 100, 340, 900, 1000, 1_762_000_000_000)
+        assertEquals(s, StatsSnapshot.fromJson(s.toJson()))
+    }
+
+    @Test
+    fun badJsonGivesNull() {
+        assertEquals(null, StatsSnapshot.fromJson(null))
+        assertEquals(null, StatsSnapshot.fromJson("{}"))
+        assertEquals(null, StatsSnapshot.fromJson("not json"))
+    }
+
+    @Test
+    fun builtFromReports() {
+        val rt = Realtime(5, List(REALTIME_MINUTES) { 0L }, emptyList())
+        val sum = Summary(
+            MetricSet(10, 1, 2, 30), MetricSet(8), MetricSet(70), MetricSet(60),
+            emptyList(), emptyList(), emptyList(),
+        )
+        assertEquals(StatsSnapshot(5, 10, 8, 30, 70, 60, 42), StatsSnapshot.of(rt, sum, 42))
+    }
+}

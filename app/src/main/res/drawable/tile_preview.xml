@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown in the tile picker: a mini mock of the tile (big number + two stats + chip). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#000000" android:pathData="M96,0a96,96 0,1 1,0 192a96,96 0,1 1,0 -192z" />
+    <path android:fillColor="#F9AB00" android:pathData="M74,34h44v6h-44z" />
+    <path android:fillColor="#81C995" android:pathData="M66,54h60v34h-60z" />
+    <path android:fillColor="#BDC1C6" android:pathData="M48,100h36v6h-36zM108,100h36v6h-36z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M50,112h32v14h-32zM110,112h32v14h-32z" />
+    <path android:fillColor="#81C995" android:pathData="M54,132h24v5h-24zM114,132h24v5h-24z" />
+    <path android:fillColor="#F9AB00" android:pathData="M68,150h56a12,12 0,0 1,0 24h-56a12,12 0,0 1,0 -24z" />
+</vector>

@@ -10,6 +10,18 @@ A standalone **Wear OS** app that shows your **Google Analytics 4** stats on you
 | **Top pages now / 7d** | The most-viewed pages and screens |
 | **Top countries · 7d** | Where your users are |
 
+### Tile
+
+Swipe left from the watch face, tap **+**, and add the **Analytics** tile. It shows:
+
+- **Active now** (realtime users, large)
+- **Today** and **7 days** users, each with ▲/▼ vs. the previous period
+- When it last updated (red "offline" means it's showing cached numbers)
+
+Tap the numbers to refresh, or tap **Open** to launch the full app. The tile refreshes itself about every 15 min. While the app is open it pushes fresh numbers to the tile, so the two stay in sync.
+
+### Refresh
+
 Realtime numbers refresh every 60 s while the app is open, and the summary refreshes every 10 min. Tap **Refresh** to update everything immediately. Polling stops when the app is in the background.
 
 It talks to the [GA4 Data API](https://developers.google.com/analytics/devguides/reporting/data/v1) directly over HTTPS. It does not need a phone companion app or Google Play Services.
@@ -84,6 +96,7 @@ app/src/main/java/dev/openanalytics/wear/
   data/      GA4 + OAuth client (plain JVM code, unit tested)
   config/    finds credentials on the device
   ui/        Compose for Wear OS screens, charts and the ViewModel
+  tile/      the Analytics tile (ProtoLayout)
 scripts/provision.sh   pushes credentials over ADB
 ```
 

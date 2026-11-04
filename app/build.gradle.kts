@@ -67,6 +67,13 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 
+    // Tile
+    implementation("androidx.wear.tiles:tiles:1.4.1")
+    implementation("androidx.wear.protolayout:protolayout:1.2.1")
+    implementation("androidx.wear.protolayout:protolayout-material:1.2.1")
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+    implementation("com.google.guava:listenablefuture:1.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real org.json for JVM unit tests
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")

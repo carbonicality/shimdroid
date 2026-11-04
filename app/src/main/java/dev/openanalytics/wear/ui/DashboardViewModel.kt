@@ -3,11 +3,11 @@ package dev.openanalytics.wear.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import dev.openanalytics.wear.config.ConfigLoader
+import dev.openanalytics.wear.config.Analytics
 import dev.openanalytics.wear.data.AnalyticsClient
 import dev.openanalytics.wear.data.Realtime
+import dev.openanalytics.wear.data.StatsSnapshot
 import dev.openanalytics.wear.data.Summary
-import dev.openanalytics.wear.data.TokenProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,9 +42,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     /** Re-reads credentials (e.g. after provisioning them while the app is open). */
     fun reloadConfig() {
         client = try {
-            val cfg = ConfigLoader.load(getApplication())
-            _state.update { it.copy(configError = null, propertyId = cfg.propertyId) }
-            AnalyticsClient(cfg.propertyId, TokenProvider(cfg.serviceAccount))
+            val c = Analytics.client(getApplication())
+            _state.update { it.copy(configError = null, propertyId = c.propertyId) }
+            c
         } catch (e: Exception) {
             _state.update { it.copy(configError = e.message ?: e.toString()) }
             null
@@ -73,6 +73,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         realtime = realtime, summary = summary, propertyName = name,
                         error = null, updatedAt = LocalTime.now(),
                     )
+                }
+                if (summary != null) {
+                    Analytics.saveSnapshot(getApplication(), StatsSnapshot.of(realtime, summary, now))
+                    Analytics.requestTileUpdate(getApplication())
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: e.toString()) }
