@@ -5,7 +5,7 @@ A standalone **Wear OS** app and set of tiles that show your **Google Analytics 
 **The app** has two pages; swipe between them:
 
 1. **Minute ring:** 30 ticks around the edge, one per minute, sized by traffic. **Turn the bezel** (swipe around the edge on a Galaxy Watch 7) or **tap a tick** to choose how far back to count. The centre shows unique users in that window, plus **Now** and **Past 30 min**.
-2. **Dashboard:** Today (vs yesterday), Last 7 days (vs the prior week, with daily bars), pages people are on now, top pages and countries this week, then Refresh / Change property / Sign out.
+2. **Dashboard:** Today (vs yesterday), Last 7 days (vs the prior week, with daily bars), pages people are on now, top pages and countries this week, then Change property / Sign out. It updates live; pull down to refresh now.
 
 **Tiles.** Add any of these from the tile picker:
 
@@ -74,7 +74,7 @@ Use **Change property** or **Sign out** at the bottom of the app to switch.
 
 The three analytics tiles share one fetch. The system refreshes them about every 15 min, and while the app is open it pushes fresh numbers to them. If a tile can't connect, it shows its last numbers with a red "offline · time" note next to the DC time. Tapping any tile opens the app. The US clock tile needs no data; it updates every minute by itself.
 
-In the app, realtime numbers refresh every 60 s and the rest every 10 min. Nothing polls in the background.
+In the app, numbers update live while it's on screen: realtime every 20 s, Today and the 7-day totals every minute. **Pull down** from the top of the dashboard to refresh straight away. Nothing polls in the background.
 
 ## Troubleshooting
 

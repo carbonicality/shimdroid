@@ -35,6 +35,8 @@ data class DashboardState(
     val realtime: Realtime? = null,
     val summary: Summary? = null,
     val loading: Boolean = false,
+    /** A refresh the user asked for (pull-to-refresh) is running: show the spinner. */
+    val refreshing: Boolean = false,
     val error: String? = null,
     val updatedAt: LocalTime? = null,
     /** Google wants the user to approve access; the UI launches this then calls [DashboardViewModel.consentHandled]. */
@@ -53,6 +55,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var summaryFetchedAtMs = 0L
     private var job: Job? = null
     private var propertiesJob: Job? = null
+    private var refreshGen = 0
     private var windowJob: Job? = null
     /** Window size -> users, valid until the next realtime refresh. */
     private val windowCache = mutableMapOf<Int, Long>()
@@ -175,9 +178,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun refresh(forceSummary: Boolean = false) {
         if (_state.value.stage != Stage.Dashboard) return
-        if (job?.isActive == true) return
+        if (job?.isActive == true) {
+            if (!forceSummary) return // a background tick can wait for the running one
+            job?.cancel() // the user asked: start a fresh, complete refresh now
+        }
+        val gen = ++refreshGen
         job = viewModelScope.launch {
-            _state.update { it.copy(loading = true) }
+            _state.update { it.copy(loading = true, refreshing = forceSummary || it.refreshing) }
             try {
                 val client = Analytics.client(ctx)
                 val now = System.currentTimeMillis()
@@ -193,10 +200,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     Analytics.saveSnapshot(ctx, StatsSnapshot.of(realtime, summary, now))
                     Analytics.requestTileUpdate(ctx)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 handleError(e)
             } finally {
-                _state.update { it.copy(loading = false) }
+                // A newer refresh owns the loading flags now.
+                if (gen == refreshGen) _state.update { it.copy(loading = false, refreshing = false) }
             }
         }
     }
@@ -210,8 +220,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        const val REALTIME_INTERVAL_MS = 60_000L
-        const val SUMMARY_TTL_MS = 10 * 60_000L
+        /** Live numbers while the app is on screen, like GA's realtime view. */
+        const val REALTIME_INTERVAL_MS = 20_000L
+        /** Today / 7-day totals. */
+        const val SUMMARY_TTL_MS = 60_000L
         const val WINDOW_DEBOUNCE_MS = 350L
     }
 }

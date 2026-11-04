@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -80,7 +84,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val LIVE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
 /** Everything the UI can ask for. */
 class AppActions(
@@ -292,10 +296,22 @@ private fun PairStat(label: String, value: Long, modifier: Modifier = Modifier) 
     }
 }
 
-/** Page 2: everything else. */
+/** Page 2: everything else. Pull down from the top to refresh now. */
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun DashboardList(state: DashboardState, actions: AppActions, listState: ScalingLazyListState) {
-    PaperList(listState) { dashboardItems(state, actions) }
+    val pull = rememberPullRefreshState(refreshing = state.refreshing, onRefresh = actions.refresh)
+    Box(Modifier.fillMaxSize().pullRefresh(pull)) {
+        PaperList(listState) { dashboardItems(state, actions) }
+        PullRefreshIndicator(
+            refreshing = state.refreshing,
+            state = pull,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 18.dp),
+            backgroundColor = Palette.Surface,
+            contentColor = Palette.Accent,
+            scale = true,
+        )
+    }
 }
 
 private fun ScalingLazyListScope.dashboardItems(state: DashboardState, actions: AppActions) {
@@ -333,14 +349,17 @@ private fun ScalingLazyListScope.dashboardItems(state: DashboardState, actions: 
         if (s.topCountries.isNotEmpty()) item { Ranked("Countries · 7 days", s.topCountries) }
     }
 
-    item {
-        PaperChip(
-            label = if (state.loading) "Refreshing…" else "Refresh",
-            icon = R.drawable.ic_refresh,
-            secondary = state.updatedAt?.let { "Updated ${it.format(TIME_FMT)}" },
-            enabled = !state.loading,
-            onClick = actions.refresh,
-        )
+    state.updatedAt?.let { t ->
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(5.dp).clip(CircleShape).background(if (state.error == null) Palette.Up else Palette.Down))
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    "Live · updated ${t.format(LIVE_FMT)} · pull to refresh",
+                    color = Palette.Muted, fontSize = 9.sp,
+                )
+            }
+        }
     }
     item {
         PaperChip("Change property", R.drawable.ic_chart, secondary = state.property?.name, onClick = actions.changeProperty)
